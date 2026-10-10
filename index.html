@@ -2222,7 +2222,7 @@ requestAnimationFrame(frame);
 
 /* ---------- 録画（オンのときだけ。映像はキャンバス、音は録画用の出力） ---------- */
 const canRec = !!(cv.captureStream && window.MediaRecorder);
-let recOn = false, rec = null, recBlob = null, recTok = 0, recErr = '';
+let recOn = false, rec = null, recBlob = null, recTok = 0, recErr = '', recNote = ''; // recNote: 動画の案内に付ける補足（無限モードで最後の何秒か）
 try { recOn = canRec && localStorage.getItem('itazurush-rec') !== '0'; } catch (e) { recOn = canRec; } // はじめはオン。切り替えたら覚えておく
 // 録画用のストリームは一度だけ作って使い回す（毎回作り直すと、端末によっては2回目以降が録れない）
 // 容量を抑えるため、画面そのものではなく横 REC_W px の録画用キャンバスに縮小コピーしたものを録る
@@ -2259,7 +2259,7 @@ function recNew(sess) { // 録画を1本始める
   return part;
 }
 function recStart() {
-  recBlob = null; recTok++; recErr = ''; rec = null;
+  recBlob = null; recTok++; recErr = ''; rec = null; recNote = '';
   if (!recOn || !canRec) return;
   const types = ['video/mp4;codecs="avc1.42E01E,mp4a.40.2"', 'video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4;codecs=avc1,mp4a.40.2', 'video/mp4',
     'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
@@ -2287,7 +2287,8 @@ function recStop() {
     if (!keep.chunks.length) { $('recHint').textContent = 'この端末では録画データを作れませんでした。' + (recErr ? '（' + recErr + '）' : ''); return; }
     recBlob = new Blob(keep.chunks, { type: (keep.mime || 'video/webm').split(';')[0] });
     $('saveVid').hidden = false;
-    $('recHint').textContent = ss.multi && ss.t > REC_MAX ? '動画の準備ができました（無限モードなので、最後の' + len + '秒）。' : '動画の準備ができました。';
+    recNote = ss.multi && ss.t > REC_MAX ? '（無限モードなので、最後の' + len + '秒）' : '';
+    $('recHint').textContent = '動画の準備ができました' + recNote + '。';
   };
   keep.r.onstop = fin;
   if (keep.r.state !== 'inactive') { try { keep.r.stop(); } catch (e) { fin(); } } else fin();
@@ -2396,8 +2397,8 @@ $('xpost').addEventListener('click', () => {
 $('saveVid').addEventListener('click', () => {
   if (!recBlob || !res) return;
   saveBlob(recBlob, 'itazu-rush-' + res.yen + 'yen.' + (recBlob.type.indexOf('mp4') >= 0 ? 'mp4' : 'webm'), shareText());
-  $('recHint').textContent = '動画を書き出しました。';
-  if (unlock(['movie']).length) $('recHint').textContent = '動画を書き出しました。図鑑に「記念撮影」を登録しました。';
+  $('recHint').textContent = '動画を書き出しました' + recNote + '。';
+  if (unlock(['movie']).length) $('recHint').textContent = '動画を書き出しました' + recNote + '。図鑑に「記念撮影」を登録しました。';
 });
 function setSound(v) {
   soundOn = v; $('soundChk').checked = v; $('soundChk2').checked = v;
