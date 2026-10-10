@@ -83,7 +83,6 @@ button.mini:active{transform:translate(2px,2px)}
 
   <section class="panel" id="title">
     <div class="card">
-      <div class="tag">試作版</div>
       <h1>いたず<br><span>ラッシュ</span></h1>
       <p class="lead">子どものころ、やりたかったやつ。<br>後片付けのことは考えなくていい。</p>
       <ul class="chips" id="chips" aria-label="出てくるいたずら"></ul>
@@ -205,12 +204,16 @@ function initAudio() {
     noiseBuf = AC.createBuffer(1, Math.floor(AC.sampleRate * 0.5), AC.sampleRate);
     const d = noiseBuf.getChannelData(0);
     for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-    bus = AC.createGain(); bus.gain.value = 0.8;
+    bus = AC.createGain(); bus.gain.value = 1.2;
+    // 音を大きくした分、重なったときに割れないようにリミッターをはさむ
+    const lim = AC.createDynamicsCompressor();
+    lim.threshold.value = -6; lim.knee.value = 6; lim.ratio.value = 12; lim.attack.value = 0.003; lim.release.value = 0.15;
+    bus.connect(lim);
     spk = AC.createGain(); spk.gain.value = soundOn ? 1 : 0;
-    bus.connect(spk); spk.connect(AC.destination);
+    lim.connect(spk); spk.connect(AC.destination);
     bgmBus = AC.createGain(); bgmBus.gain.value = 0.55; bgmBus.connect(bus);
     try {
-      recDest = AC.createMediaStreamDestination(); bus.connect(recDest);
+      recDest = AC.createMediaStreamDestination(); lim.connect(recDest);
       // 録画用の音声を途切れさせないための、聞こえない音（スピーカーには流さない）。無音区間で音声データが抜けると動画の音がズレる
       const ka = AC.createOscillator(), kg = AC.createGain();
       ka.frequency.value = 20; kg.gain.value = 0.0005; ka.connect(kg); kg.connect(recDest); ka.start();
@@ -475,6 +478,7 @@ const toilet = {
   },
   update(dt) {
     this.refill = Math.max(0, this.refill - dt);
+    if (!scoring()) { this.vel = 0; this.pend = 0; return; } // 時間切れのあとは転がらない（数えない）
     if (this.pend > 0) {
       this.vel = Math.min(7000, Math.max(this.vel, this.pend / Math.max(dt, 0.008) * 0.9));
       this.add(this.pend); this.pend = 0;
@@ -531,10 +535,13 @@ const toilet = {
     rr(cx + rw / 2 + 8, cy - 12, 18, 24, 5); ctx.fill(); ctx.stroke();
     // ロール
     rr(cx - rw / 2 - 5, cy - r, rw + 10, r * 2, Math.min(14, r)); ctx.fillStyle = PAPER; ctx.fill(); ctx.stroke();
-    ctx.save(); rr(cx - rw / 2 - 5, cy - r, rw + 10, r * 2, Math.min(14, r)); ctx.clip();
-    ctx.strokeStyle = 'rgba(35,27,46,.16)'; ctx.lineWidth = 2; ctx.beginPath();
-    for (let k = 0; k < 2 * r; k += 16) { const y = cy - r + ((k + this.len * 0.6) % (2 * r)); ctx.moveTo(cx - rw / 2 - 5, y); ctx.lineTo(cx + rw / 2 + 5, y); }
-    ctx.stroke(); ctx.restore();
+    // 1周に1本だけ細い破線を入れて、回っているのを見せる（表側にあるときだけ見える）
+    const phi = (this.len / Math.max(1, r)) % (Math.PI * 2);
+    if (Math.sin(phi) > 0.05) {
+      const y = cy - r * Math.cos(phi);
+      ctx.save(); ctx.setLineDash([6, 6]); ctx.strokeStyle = 'rgba(35,27,46,.22)'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(cx - rw / 2 + 4, y); ctx.lineTo(cx + rw / 2 - 4, y); ctx.stroke(); ctx.restore();
+    }
     // カバー
     rr(cx - rw / 2 - 30, cy - rw * 0.44 - 26, rw + 60, 22, 8); ctx.fillStyle = '#dfe5ea'; ctx.fill(); ctx.strokeStyle = INK; ctx.lineWidth = 4; ctx.stroke();
     if (this.refill > 0) bigText('おかわり！', cx, cy + rw * 0.44 + 60, 30, POP, INK, W * 0.8);
@@ -558,7 +565,7 @@ const shoji = {
     const h = t.holes || 0, f = t.faces || 0;
     return { v: h + '穴', n: f ? '張り替え ' + f + '面（1穴でも1面まるごと）' : '無傷', sec: f * 3600, yen: f * 2000 };
   },
-  init() { this.n = 0; this.faces = 0; this.dirty = false; this.panes = new Array(COLS * ROWS).fill(null); this.old = null; this.slide = 0; this.wait = 0; this.bits = []; },
+  init() { this.n = 0; this.faces = 0; this.dirty = false; this.panes = new Array(COLS * ROWS).fill(null); this.old = null; this.slide = 0; this.wait = 0; this.bits = []; this.ptr = {}; },
   started() { return this.n > 0; },
   result() { return this.n + '穴'; },
   commit(tot) { add(tot, 'holes', this.n); add(tot, 'faces', this.faces); },
@@ -586,9 +593,9 @@ const shoji = {
     sfx.shoji();
     if (this.panes.every(Boolean)) this.wait = 0.16;
   },
-  down(id, x, y) { this.hit(x, y); },
-  move(id, x, y) { this.hit(x, y); },
-  up() {},
+  down(id, x, y) { this.ptr[id] = 1; this.hit(x, y); },
+  move(id, x, y) { if (this.ptr[id]) this.hit(x, y); }, // 押している指だけ（PCでマウスを動かしただけでは破れない）
+  up(id) { if (id == null) this.ptr = {}; else delete this.ptr[id]; },
   update(dt) {
     if (this.wait > 0) { this.wait -= dt; if (this.wait <= 0) { this.wait = 0; this.old = this.panes; this.panes = new Array(COLS * ROWS).fill(null); this.dirty = false; this.slide = 1; sfx.slide(); } }
     if (this.slide > 0) { this.slide = Math.max(0, this.slide - dt / 0.26); if (this.slide === 0) this.old = null; }
@@ -714,7 +721,7 @@ const paste = {
     this.press = n ? Math.min(1, this.press + dt * 1.5) : Math.max(0, this.press - dt * 5);
     const target = n ? (30 + 90 * this.press) * (n > 1 ? 1.4 : 1) : 0; // cm/秒。長く押すほど勢いが増す。2本指だとさらに
     this.flow += (target - this.flow) * Math.min(1, dt * 12);
-    if (!n && this.flow < 1) this.flow = 0;
+    if (!n && this.flow < 1 || !scoring()) this.flow = 0; // 時間切れのあとは出ない
     const d = this.flow * dt;
     this.cm += d; this.used += d; this.acc += d;
     if (this.acc > 8) { this.acc = 0; sfx.squish(); }
@@ -922,8 +929,9 @@ const snow = {
   },
   up(id) { if (id == null) this.ptr = {}; else delete this.ptr[id]; },
   place(x, y, a, p) { // 進む向きの左右に交互に足あと
-    const s = SC(), off = p.side * 8 * s;
-    this.prints.push({ x: x - Math.sin(a) * off, y: y + Math.cos(a) * off, a });
+    const s = SC(), off = p.side * 8 * s, fx = x - Math.sin(a) * off, fy = y + Math.cos(a) * off;
+    if (fy < H * 0.2 + 12 * s) return; // 雪原（地平線より下）だけ
+    this.prints.push({ x: fx, y: fy, a });
     if (this.prints.length > 600) this.prints.shift();
     p.side = -p.side; this.n++;
     for (let k = 0; k < 3; k++) this.puffs.push({ x, y, vx: rnd(-80, 80) * s, vy: rnd(-120, -30) * s, life: rnd(0.3, 0.6), r: rnd(2, 4) * s });
@@ -1158,7 +1166,7 @@ const puddle = {
       this.mud.push({ x: W / 2 + Math.cos(a) * W * 0.55 * d, y: H * 0.55 + Math.sin(a) * H * 0.45 * d, r: rnd(8, 22) * s * (0.6 + p), seed: Math.random() * 99 });
     }
     if (this.mud.length > 160) this.mud.splice(0, this.mud.length - 160);
-    this.spots += nm;
+    if (scoring()) this.spots += nm; // 時間切れのあとに着地した分は数えない
     this.rings.push({ x: g.cx, y: g.cy, k: 0, d: 0.6, r: g.R * 1.1 });
     sfx.splash(p);
   },
@@ -1283,7 +1291,7 @@ const hose = {
     this.t += dt; this.full = Math.max(0, this.full - dt * 0.8);
     const g = this.geo(), s = g.s, o = this.open, a = Math.pow(o, 1.2);
     const flow = 4 * a; // L/秒。全開はふつうの蛇口よりかなり多め
-    this.L += flow * dt;
+    if (scoring()) this.L += flow * dt; // 時間切れのあとの水は数えない（見た目は出し続ける）
     // 開くほどホースの先があばれる
     const tx = W / 2 + (Math.sin(this.t * 2.7) * 0.32 + Math.sin(this.t * 6.1) * 0.05) * W * a - (1 - a) * W * 0.15;
     const ty = g.ground - 20 * s - (0.5 + 0.5 * Math.sin(this.t * 3.9)) * H * 0.26 * a;
@@ -1303,7 +1311,7 @@ const hose = {
       let gone = p.x < -20 || p.x > W + 20 || p.y > H + 20;
       if (!gone) for (const c of this.cloth) {
         const r = this.clothRect(c, g);
-        if (p.x > r.x && p.x < r.x + r.w && p.y > r.y && p.y < r.y + r.h) { c.wet = Math.min(1, c.wet + 0.04); gone = true; break; }
+        if (p.x > r.x && p.x < r.x + r.w && p.y > r.y && p.y < r.y + r.h) { if (scoring()) c.wet = Math.min(1, c.wet + 0.04); gone = true; break; }
       }
       if (!gone && p.vy > 0 && p.y >= p.land) { if (this.pools.length < 140 && Math.random() < 0.3) this.pools.push({ x: p.x, y: p.land, r: rnd(10, 22) * s }); gone = true; }
       if (gone) this.parts.splice(i, 1);
@@ -1390,14 +1398,14 @@ const hose = {
 /* ---------- ステージ10: エレベーター ---------- */
 const EC = 3, ER = 8; // ボタンの列と段
 const elev = {
-  key: 'elev', name: 'エレベーター', prompt: '全部押せ！', hint: 'ボタンを かたっぱしからタップ', bg: '#c9ced6',
+  key: 'elev', name: 'エレベーター', prompt: '全部押せ！', hint: 'タップ、またはなぞって全部', bg: '#c9ced6',
   bgm: song(108, [ // エレベーターの中に流れていそうな音楽
     ['ep', 0.09, '76 . . 74 . . 72 . 71 - - . 69 . . . 74 . . 72 . . 71 . 69 - - . 67 - - .'],
     ['triangle', 0.12, '48 . . 55 48 . . 55 50 . . 57 50 . . 57 43 . . 50 43 . . 50 48 . . 55 48 . . 55']
   ], ['r..r..r...r..r..r..r..r...r..r..', 'h.h.h.h.h.h.h.h.h.h.h.h.h.h.h.h.'], { every: 8, v: 'ep', vol: 0.03, chords: [[64, 67, 71], [62, 65, 69], [59, 62, 65], [64, 67, 71]] }),
   shop: null,
   bill(t) { const n = t.elev || 0; return { v: n + '階分', n: '全部の階に止まる（乗り合わせた人も巻きぞえ）', sec: n * 15, yen: 0 }; },
-  init() { this.n = 0; this.lit = new Array(EC * ER).fill(0); this.old = null; this.slide = 0; this.wait = 0; this.t = 0; },
+  init() { this.n = 0; this.lit = new Array(EC * ER).fill(0); this.old = null; this.slide = 0; this.wait = 0; this.t = 0; this.ptr = {}; this.cars = 1; this.banner = 0; },
   started() { return this.n > 0; },
   result() { return this.n + '階分'; },
   commit(tot) { add(tot, 'elev', this.n); },
@@ -1409,20 +1417,24 @@ const elev = {
   floor(i) { return (ER - 1 - Math.floor(i / EC)) * EC + i % EC + 1; },
   center(i, g) { return [g.x + (i % EC + 0.5) * g.cw, g.top + (Math.floor(i / EC) + 0.5) * g.ch]; },
   buttons() { const g = this.geo(); return this.lit.map((_, i) => this.center(i, g)); },
-  down(id, x, y) {
+  press(x, y, reach) {
     if (this.slide > 0 || this.wait > 0) return;
     const g = this.geo();
-    let best = -1, bd = g.r * 1.5;
+    let best = -1, bd = g.r * reach;
     this.lit.forEach((v, i) => { const c = this.center(i, g), d = Math.hypot(x - c[0], y - c[1]); if (d < bd) { bd = d; best = i; } });
     if (best < 0 || this.lit[best]) return;
     this.lit[best] = 1; this.n++; sfx.ding(this.floor(best));
     if (this.lit.every(Boolean)) this.wait = 0.2; // 全部光ったら次のエレベーターへ
   },
-  move() {},
-  up() {},
+  down(id, x, y) { this.ptr[id] = 1; this.press(x, y, 1.5); },
+  move(id, x, y) { if (this.ptr[id]) this.press(x, y, 1.2); }, // なぞっても押せる（押している指だけ）
+  up(id) { if (id == null) this.ptr = {}; else delete this.ptr[id]; },
   update(dt) {
-    this.t += dt;
-    if (this.wait > 0) { this.wait -= dt; if (this.wait <= 0) { this.wait = 0; this.old = this.lit; this.lit = new Array(EC * ER).fill(0); this.slide = 1; sfx.slide(); } }
+    this.t += dt; this.banner = Math.max(0, this.banner - dt);
+    if (this.wait > 0) {
+      this.wait -= dt;
+      if (this.wait <= 0) { this.wait = 0; this.old = this.lit; this.lit = new Array(EC * ER).fill(0); this.slide = 1; this.cars++; this.banner = 1; sfx.slide(); }
+    }
     if (this.slide > 0) { this.slide = Math.max(0, this.slide - dt / 0.3); if (this.slide === 0) this.old = null; }
   },
   panel(lit, ox) {
@@ -1460,6 +1472,12 @@ const elev = {
     ctx.fillStyle = 'rgba(255,255,255,.25)'; for (let x = 0; x < W; x += 60) ctx.fillRect(x, 0, 28, H);
     if (this.old) { const e = 1 - this.slide, k = e * e * (3 - 2 * e); this.panel(this.old, -k * W); this.panel(this.lit, (1 - k) * W); }
     else this.panel(this.lit, 0);
+    if (this.banner > 0) { // 全部押したら次のエレベーター
+      const e = calm ? 1 : Math.min(1, (1 - this.banner) / 0.15), g = this.geo();
+      ctx.save(); ctx.globalAlpha = Math.min(1, this.banner * 4); ctx.translate(W / 2, g.top + g.ch * 3.5); ctx.rotate(-0.08); ctx.scale(1.6 - 0.6 * e, 1.6 - 0.6 * e);
+      bigText(this.cars + '台目！', 0, 0, 56 * g.s, POP, INK, W * 0.8);
+      ctx.restore();
+    }
   },
   drawHint(t) { const g = this.geo(), c = this.center(9 + Math.floor(t * 2.5) % 3, g); tapHint(c[0], c[1], t, 2.5); }
 };
@@ -1549,6 +1567,8 @@ const hud = $('hud');
 const panels = { title: $('title'), pause: $('pause'), result: $('result'), shop: $('shop') };
 
 const speed = () => Math.min(PLAY.length - 1, Math.floor(Math.max(0, count - 1) / N));
+// 成果を数えてよいのはプレイ中だけ（時間切れのあとの慣性や流れっぱなしの分は数えない）
+function scoring() { return mode === 'play'; }
 function shuffle(prev) {
   const a = NORMAL.slice();
   for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
