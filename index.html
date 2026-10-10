@@ -58,6 +58,7 @@ button:focus-visible,input:focus-visible,a:focus-visible{outline:3px solid var(-
 .opt{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:700;cursor:pointer}
 .opt input{width:20px;height:20px;accent-color:var(--hot)}
 .small{font-size:12px;color:var(--mute);line-height:1.6}
+.challenge{font-size:14px;font-weight:900;line-height:1.6;background:var(--pop);border:3px solid var(--ink);border-radius:6px;padding:8px 12px}
 .small:empty{display:none}
 
 /* 結果：中身はキャンバスに描き、下にボタンの帯だけ出す */
@@ -83,6 +84,7 @@ button.mini:active{transform:translate(2px,2px)}
 
   <section class="panel" id="title">
     <div class="card">
+      <p class="challenge" id="challenge" hidden></p>
       <h1>いたず<br><span>ラッシュ</span></h1>
       <p class="lead">子どものころ、やりたかったやつ。<br>後片付けのことは考えなくていい。</p>
       <ul class="chips" id="chips" aria-label="出てくるいたずら"></ul>
@@ -350,7 +352,7 @@ const tissue = {
     ['triangle', 0.16, '48 . . . 55 . . . 48 . . . 55 . . . 53 . . . 55 . . . 48 . . . 43 . 47 .']
   ], ['k.h.s.h.k.h.s.hhk.h.s.h.k.h.s.hh']),
   shop: [['箱ティッシュ', 'ボックスティッシュ まとめ買い']],
-  bill(t) { const n = t.tissue || 0; return { v: n + '枚', n: '箱ティッシュ ' + (n / 150).toFixed(1) + '箱分', sec: n * 2, yen: n * 100 / 150 }; },
+  bill(t) { const n = t.tissue || 0; return { v: n + '枚', n: '箱ティッシュ ' + (n / 150).toFixed(1) + '箱分', sec: n * 3, yen: n * 150 / 150 }; },
   init() { this.n = 0; this.need = 0; this.lean = 1; this.pop = 1; this.shake = 0; this.fly = []; this.set = []; this.ptr = {}; this.t = 0; },
   started() { return this.n > 0; },
   result() { return this.n + '枚'; },
@@ -457,7 +459,7 @@ const toilet = {
     ['square', 0.06, '38 . 50 . 38 . 50 . 36 . 48 . 36 . 48 . 34 . 46 . 34 . 46 . 33 . 45 . 33 . 45 .']
   ], ['k.h.s.h.k.k.s.h.k.h.s.h.k.h.s.ss']),
   shop: [['トイレットペーパー', 'トイレットペーパー まとめ買い']],
-  bill(t) { const m = (t.tp || 0) / PXM; return { v: m.toFixed(1) + 'm', n: 'ロール ' + (m / ROLL_M).toFixed(1) + '個分', sec: m * 4, yen: m * 50 / ROLL_M }; },
+  bill(t) { const m = (t.tp || 0) / PXM; return { v: m.toFixed(1) + 'm', n: 'ロール ' + (m / ROLL_M).toFixed(1) + '個分・巻き直す', sec: m * 5, yen: m * 60 / ROLL_M }; },
   init() { this.len = 0; this.vel = 0; this.pend = 0; this.ptr = {}; this.tick = 0; this.rolls = 0; this.refill = 0; },
   started() { return this.len > 30; },
   result() { return (this.len / PXM).toFixed(1) + 'm'; },
@@ -554,6 +556,7 @@ const toilet = {
 
 /* ---------- ステージ3: 障子 ---------- */
 const COLS = 4, ROWS = 5;
+const SHOJI_PATCH = 5; // 1面あたりこの穴の数までは補修シールですむ
 const shoji = {
   key: 'shoji', name: '障子', prompt: '破れ！', hint: 'タップ、またはなぞる', bg: '#d9c79a',
   bgm: song(128, [ // 和風（都節の音階、琴と太鼓）
@@ -561,14 +564,19 @@ const shoji = {
     ['pluck', 0.1, '52 . . . . . 57 . 52 . . . 59 . . . 57 . . . 53 . . . 52 . . . . . . .']
   ], ['t...t.t.t...t...t...t.t.t.t.tttt']),
   shop: [['障子紙', '障子紙'], ['障子の補修シール', '障子 補修シール']],
-  bill(t) {
-    const h = t.holes || 0, f = t.faces || 0;
-    return { v: h + '穴', n: f ? '張り替え ' + f + '面（1穴でも1面まるごと）' : '無傷', sec: f * 3600, yen: f * 2000 };
+  bill(t) { // 1面あたり SHOJI_PATCH 穴までは補修シール、それを超えたら1面まるごと張り替え
+    const fs = t.shojiF || [], full = fs.filter(h => h > SHOJI_PATCH).length, patch = fs.filter(h => h <= SHOJI_PATCH).reduce((a, h) => a + h, 0);
+    const n = [full ? '張り替え ' + full + '面' : '', patch ? '補修シール ' + patch + '穴' : ''].filter(Boolean).join('・') || '無傷';
+    return { v: (t.holes || 0) + '穴', n, sec: full * 1200 + patch * 60, yen: full * 1000 + patch * 50 };
   },
-  init() { this.n = 0; this.faces = 0; this.dirty = false; this.panes = new Array(COLS * ROWS).fill(null); this.old = null; this.slide = 0; this.wait = 0; this.bits = []; this.ptr = {}; },
+  init() { this.n = 0; this.faces = 0; this.faceHoles = []; this.dirty = false; this.panes = new Array(COLS * ROWS).fill(null); this.old = null; this.slide = 0; this.wait = 0; this.bits = []; this.ptr = {}; },
   started() { return this.n > 0; },
   result() { return this.n + '穴'; },
-  commit(tot) { add(tot, 'holes', this.n); add(tot, 'faces', this.faces); },
+  commit(tot) {
+    add(tot, 'holes', this.n);
+    const cur = this.panes.filter(Boolean).length;
+    tot.shojiF = (tot.shojiF || []).concat(this.faceHoles, cur ? [cur] : []); // 面ごとの穴の数
+  },
   geo() {
     const w = Math.min(W * 0.86, 420), h = Math.min(H * 0.72, w * 1.6);
     const x = (W - w) / 2, y = H * 0.15 + (H * 0.72 - h) / 2;
@@ -597,7 +605,7 @@ const shoji = {
   move(id, x, y) { if (this.ptr[id]) this.hit(x, y); }, // 押している指だけ（PCでマウスを動かしただけでは破れない）
   up(id) { if (id == null) this.ptr = {}; else delete this.ptr[id]; },
   update(dt) {
-    if (this.wait > 0) { this.wait -= dt; if (this.wait <= 0) { this.wait = 0; this.old = this.panes; this.panes = new Array(COLS * ROWS).fill(null); this.dirty = false; this.slide = 1; sfx.slide(); } }
+    if (this.wait > 0) { this.wait -= dt; if (this.wait <= 0) { this.wait = 0; this.old = this.panes; this.faceHoles.push(COLS * ROWS); this.panes = new Array(COLS * ROWS).fill(null); this.dirty = false; this.slide = 1; sfx.slide(); } }
     if (this.slide > 0) { this.slide = Math.max(0, this.slide - dt / 0.26); if (this.slide === 0) this.old = null; }
     for (let i = this.bits.length - 1; i >= 0; i--) {
       const b = this.bits[i]; b.vy += 900 * dt; b.x += b.vx * dt; b.y += b.vy * dt; b.r += b.vr * dt; b.life -= dt * 1.1;
@@ -679,6 +687,10 @@ const SC = () => Math.min(W / 390, H / 700, 1.3); // 390×700 を基準にした
 const fmtLen = cm => cm < 100 ? Math.floor(cm) + 'cm' : (cm / 100).toFixed(1) + 'm';
 Object.assign(sfx, {
   squish() { noise(0.09, rnd(260, 420), 1.2, 0.4, 'lowpass'); tone(rnd(150, 200), 90, 0.07, 0.1, 'sine'); },
+  slip() { tone(900, 300, 0.12, 0.07, 'triangle'); },
+  squelch() { noise(0.08, rnd(300, 500), 1, 0.4, 'lowpass'); tone(rnd(110, 150), 70, 0.08, 0.12, 'sine'); },
+  lost() { tone(1200, 2400, 0.25, 0.06, 'sine'); },
+  broke() { tone(140, 60, 0.6, 0.25, 'sawtooth'); noise(0.5, 400, 0.6, 0.35, 'lowpass'); [880, 660, 880, 660].forEach((f, i) => tone(f, f, 0.12, 0.08, 'square', 0.3 + i * 0.16)); },
   pump() { tone(330, 170, 0.07, 0.12, 'triangle'); noise(0.1, 1500, 1, 0.16, 'bandpass', 0.03); },
   crunch() { noise(0.08, rnd(800, 1300), 0.6, 0.35, 'lowpass'); noise(0.05, rnd(2500, 3500), 1, 0.08); },
   flip() { noise(0.25, 700, 0.7, 0.3); tone(200, 520, 0.18, 0.1, 'square'); },
@@ -700,35 +712,51 @@ function tapHint(x, y, t, rate) {
 
 /* ---------- ステージ4: 歯みがき粉 ---------- */
 const TUBE_CM = 350; // 1本（120g）をしぼり切ると、およそこの長さ
+const PASTE_MAX = 100; // cm/秒。これより速くは出ない
 const paste = {
-  key: 'paste', name: '歯みがき粉', prompt: 'しぼれ！', hint: '長押しで ぎゅーっ', bg: '#bfe6ef',
+  key: 'paste', name: '歯みがき粉', prompt: 'しぼれ！', hint: '上から下へ ゆっくりなぞる', bg: '#bfe6ef',
   bgm: song(138, [ // むにゅっとしたファンク
     ['square', 0.04, '67 . . 70 . 72 . . 67 . . 65 . 67 . . 70 . . 72 . 74 . . 77 . 74 . 72 . 70 .'],
     ['wob', 0.2, '43 . 43 . . 46 . . 43 . 41 . . 38 . . 43 . 43 . . 46 . . 48 . 46 . 43 . 41 .']
   ], ['k..s.k..k.s..s..k.hs.kh.k.s.hs.h']),
   shop: [['歯みがき粉', '歯磨き粉']],
-  bill(t) { const cm = t.paste || 0; return { v: fmtLen(cm), n: 'チューブ ' + (cm / TUBE_CM).toFixed(1) + '本分・洗面台をふく', sec: cm / 100 * 120, yen: cm / TUBE_CM * 250 }; },
-  init() { this.cm = 0; this.hold = {}; this.press = 0; this.flow = 0; this.used = 0; this.refill = 0; this.acc = 0; this.t = 0; },
+  bill(t) { const cm = t.paste || 0; return { v: fmtLen(cm), n: 'チューブ ' + (cm / TUBE_CM).toFixed(1) + '本分・洗面台をふく', sec: cm / 100 * 60, yen: cm / TUBE_CM * 300 }; },
+  init() { this.cm = 0; this.ptr = {}; this.pend = 0; this.speed = 0; this.room = 0; this.pinch = -1; this.slip = 0; this.flow = 0; this.used = 0; this.refill = 0; this.acc = 0; this.t = 0; },
   started() { return this.cm > 0.5; },
   result() { return fmtLen(this.cm); },
   commit(tot) { add(tot, 'paste', this.cm); },
-  down(id) { this.hold[id] = 1; },
-  move() {},
-  up(id) { if (id == null) this.hold = {}; else delete this.hold[id]; },
+  // なぞった長さだけ押し出す。出る速さには上限があり、速すぎると指がすべってほとんど出ない（ゆっくり何度もしぼるのがいちばん出る）
+  down(id, x, y) { this.ptr[id] = y; this.setPinch(y); },
+  move(id, x, y) {
+    if (!(id in this.ptr)) return;
+    const dy = y - this.ptr[id]; this.ptr[id] = y;
+    if (dy > 0) this.pend += dy;
+    this.setPinch(y);
+  },
+  up(id) { if (id == null) this.ptr = {}; else delete this.ptr[id]; if (!Object.keys(this.ptr).length) this.pinch = -1; },
+  setPinch(y) { const g = this.geo(); this.pinch = clamp((y - g.y0) / (g.y1 - g.y0), 0, 1); },
   update(dt) {
-    this.t += dt;
-    const n = Object.keys(this.hold).length;
-    this.press = n ? Math.min(1, this.press + dt * 1.5) : Math.max(0, this.press - dt * 5);
-    const target = n ? (30 + 90 * this.press) * (n > 1 ? 1.4 : 1) : 0; // cm/秒。長く押すほど勢いが増す。2本指だとさらに
-    this.flow += (target - this.flow) * Math.min(1, dt * 12);
-    if (!n && this.flow < 1 || !scoring()) this.flow = 0; // 時間切れのあとは出ない
-    const d = this.flow * dt;
+    this.t += dt; this.slip = Math.max(0, this.slip - dt);
+    const s = SC(), px = this.pend;
+    this.pend = 0;
+    // 指の速さは0.1秒ほどならして見る（タッチの通知はまとめて届くことがあるため）
+    this.speed += (px / Math.max(dt, 1e-3) - this.speed) * Math.min(1, dt * 12);
+    // 出せる量は毎秒 PASTE_MAX cm ずつたまる枠から出す
+    this.room = Math.min(PASTE_MAX * 0.12, this.room + PASTE_MAX * dt);
+    let d = 0;
+    if (scoring() && px > 0) {
+      let want = px / s * 0.5; // なぞった1pxで0.5cm
+      if (this.speed / s > 700) { want *= 0.15; if (this.slip <= 0) sfx.slip(); this.slip = 0.6; } // 速すぎると指がすべる
+      d = Math.min(want, this.room); this.room -= d;
+    }
+    if (d > 0) this.flow += (d / Math.max(dt, 1e-3) - this.flow) * Math.min(1, dt * 14);
+    else this.flow = Math.max(0, this.flow - dt * 500);
     this.cm += d; this.used += d; this.acc += d;
     if (this.acc > 8) { this.acc = 0; sfx.squish(); }
     if (this.used >= TUBE_CM) { this.used -= TUBE_CM; this.refill = 1; sfx.refill(); }
     this.refill = Math.max(0, this.refill - dt);
   },
-  geo() { const s = SC(); return { s, cx: W / 2, ny: H * 0.42, top: H * 0.6, sinkY: H * 0.76, sinkW: Math.min(W * 0.84, 360 * s), rope: 15 * s }; },
+  geo() { const s = SC(), ny = H * 0.42, y1 = ny - 30 * s; return { s, cx: W / 2, ny, y1, y0: y1 - 150 * s, top: H * 0.6, sinkY: H * 0.76, sinkW: Math.min(W * 0.84, 360 * s), rope: 15 * s }; },
   rope(path, w) { // 白に青の線が入った歯みがき粉
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     path(); ctx.lineWidth = w + 4; ctx.strokeStyle = INK; ctx.stroke();
@@ -783,10 +811,10 @@ const paste = {
       const w = g.rope * (0.6 + 0.4 * Math.min(1, this.flow / 90));
       this.rope(() => { ctx.beginPath(); ctx.moveTo(g.cx, g.ny); ctx.lineTo(g.cx, topY); }, w);
     }
-    // チューブ（口が下）。押すとへこみ、使った分だけ上から平たくなる
+    // チューブ（口が下）。しぼると少しへこみ、使った分だけ上から平たくなる
     const rem = 1 - this.used / TUBE_CM;
-    const sq = 1 - 0.2 * this.press * (1 + (calm ? 0 : 0.15 * Math.sin(this.t * 30)));
-    const w = 80 * s * sq, y1 = g.ny - 30 * s, y0 = y1 - 150 * s, flat = (y1 - y0 - 44 * s) * (1 - rem), by = y0 + flat + 8 * s;
+    const sq = 1 - 0.12 * Math.min(1, this.flow / 80) * (1 + (calm ? 0 : 0.2 * Math.sin(this.t * 30)));
+    const w = 80 * s * sq, y1 = g.y1, y0 = g.y0, flat = (y1 - y0 - 44 * s) * (1 - rem), by = y0 + flat + 8 * s;
     rr(g.cx - 11 * s, y1 - 4, 22 * s, g.ny - y1 + 4, 4 * s); ctx.fillStyle = '#ffffff'; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = INK; ctx.stroke();
     rr(g.cx - 46 * s, y0, 92 * s, flat + 16 * s, 4 * s); ctx.fillStyle = '#dfe8ee'; ctx.fill(); ctx.lineWidth = 3; ctx.stroke();
     this.tubePath(g, w, by, y1); ctx.fillStyle = '#ffffff'; ctx.fill();
@@ -796,11 +824,16 @@ const paste = {
     ctx.fillText('ハミガキ', g.cx, y1 - 52 * s);
     ctx.restore();
     this.tubePath(g, w, by, y1); ctx.lineWidth = 4; ctx.strokeStyle = INK; ctx.stroke();
+    if (this.pinch >= 0) { // 両側からつまんでいる指先
+      const py = Math.max(by + 10 * s, y0 + this.pinch * (y1 - y0));
+      for (const sx of [-1, 1]) { rr(g.cx + sx * (w / 2 + 8 * s) - 13 * s, py - 9 * s, 26 * s, 18 * s, 9 * s); ctx.fillStyle = '#ffd9b8'; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = INK; ctx.stroke(); }
+    }
     if (this.refill > 0) bigText('おかわり！', g.cx, y0 - 26 * s, 30, POP, INK, W * 0.8);
+    if (this.slip > 0) bigText('ゆっくり！', g.cx + 90 * s, (y0 + y1) / 2, 26 * s, HOT, INK, W * 0.4);
   },
   drawHint(t) {
-    const g = this.geo();
-    tapHint(g.cx, g.ny - 30 * g.s - 75 * g.s, t, 1.2);
+    const g = this.geo(), p = (t * 0.7) % 1;
+    finger(g.cx, g.y0 + 24 * g.s + p * (g.y1 - g.y0 - 30 * g.s), 0.9 * (1 - p * 0.4));
   }
 };
 
@@ -813,7 +846,7 @@ const shampoo = {
     ['triangle', 0.15, '45 . . . 45 . . . 47 . . . 47 . . . 49 . . . 49 . . . 50 . . . 52 . 40 .']
   ], ['k.h.c.h.k.h.c.h.k.h.c.h.k.hhc.cc']),
   shop: [['シャンプーの詰め替え', 'シャンプー 詰め替え']],
-  bill(t) { const n = t.shampoo || 0; return { v: n + 'プッシュ', n: 'ボトル ' + (n / PUMP_N).toFixed(1) + '本分・泡を流す', sec: n * 5, yen: n * 3 }; },
+  bill(t) { const n = t.shampoo || 0; return { v: n + 'プッシュ', n: 'ボトル ' + (n / PUMP_N).toFixed(1) + '本分・泡を流す', sec: n * 4, yen: n * 5 }; },
   init() { this.n = 0; this.press = 0; this.used = 0; this.refill = 0; this.globs = []; this.blobs = []; this.bubbles = []; this.t = 0; },
   started() { return this.n > 0; },
   result() { return this.n + 'プッシュ'; },
@@ -902,22 +935,21 @@ const shampoo = {
   drawHint(t) { const g = this.geo(); tapHint(g.bx + 4 * g.s, g.hy - 4 * g.s, t, 2.4); }
 };
 
-/* ---------- ステージ6: 新雪 ---------- */
-const snow = {
-  key: 'snow', name: '新雪', prompt: '踏め！', hint: 'なぞって 足あとをつける', bg: '#f6fafe',
-  bgm: song(120, [ // 鈴の鳴る冬
-    ['bell', 0.08, '77 . 81 . 84 - . . 81 . 79 . 77 - . . 76 . 77 . 79 . 81 . 79 - . . 72 - - .'],
-    ['triangle', 0.14, '41 . . . 48 . . . 46 . . . 48 . . . 43 . . . 48 . . . 41 . . . 36 . . .']
-  ], ['kjj.jjk.jjj.kjj.kjj.jjk.jjj.kjj.']),
-  shop: [['靴乾燥機', '靴乾燥機']],
-  bill(t) { const n = t.snow || 0; return { v: n + '歩', n: 'ぬれた長靴と靴下を乾かす', sec: n * 10, yen: 0 }; },
-  init() {
-    this.n = 0; this.prints = []; this.ptr = {}; this.puffs = []; this.t = 0; this.flakes = [];
-    for (let i = 0; i < 40; i++) this.flakes.push({ x: Math.random(), y: Math.random(), r: rnd(1.5, 3.5), v: rnd(0.03, 0.07), ph: Math.random() * 6 });
-  },
+/* ---------- ステージ6: 泥んこ足 ---------- */
+const MUD_RUIN = 15; // じゅうたんにこの数の足あとがついたら、クリーニングに出す
+const mud = {
+  key: 'mud', name: '泥んこ足', prompt: '泥んこで上がれ！', hint: 'なぞって 歩きまわる', bg: '#d9a066',
+  bgm: song(132, [ // どろんこ行進
+    ['square', 0.045, '72 . 72 . 74 . 76 . 77 - 76 . 74 . 72 . 72 . 72 . 74 . 76 . 79 - 77 . 76 . 74 -'],
+    ['wob', 0.18, '48 . . 48 55 . . . 48 . . 48 55 . . . 50 . . 50 57 . . . 43 . . 43 50 . 47 .']
+  ], ['k.s.k.s.kks.k.s.k.s.k.s.kks.k.s.']),
+  shop: [['ラグ用のクリーナー', 'カーペットクリーナー'], ['玄関マット', '玄関マット']],
+  bill(t) { const n = t.mud || 0, c = t.rug || 0; return { v: n + '歩', n: c ? 'じゅうたんのクリーニング ' + c + '回・床ふき' : '床ふき', sec: n * 10, yen: c * 1500 }; },
+  init() { this.n = 0; this.onRug = 0; this.prints = []; this.ptr = {}; this.drops = []; this.t = 0; this.ruinT = 0; },
   started() { return this.n > 0; },
   result() { return this.n + '歩'; },
-  commit(tot) { add(tot, 'snow', this.n); },
+  commit(tot) { add(tot, 'mud', this.n); add(tot, 'rug', this.onRug >= MUD_RUIN ? 1 : 0); },
+  geo() { const s = SC(), top = H * 0.2; return { s, top, rx: W * 0.08, ry: top + (H - top) * 0.1, rw: W * 0.84, rh: (H - top) * 0.78 }; },
   down(id, x, y) { const p = this.ptr[id] = { x, y, acc: 0, side: this.n % 2 ? 1 : -1 }; this.place(x, y, -Math.PI / 2, p); },
   move(id, x, y) {
     const p = this.ptr[id]; if (!p) return;
@@ -929,61 +961,90 @@ const snow = {
   },
   up(id) { if (id == null) this.ptr = {}; else delete this.ptr[id]; },
   place(x, y, a, p) { // 進む向きの左右に交互に足あと
-    const s = SC(), off = p.side * 8 * s, fx = x - Math.sin(a) * off, fy = y + Math.cos(a) * off;
-    if (fy < H * 0.2 + 12 * s) return; // 雪原（地平線より下）だけ
-    this.prints.push({ x: fx, y: fy, a });
+    const g = this.geo(), s = g.s, off = p.side * 9 * s, fx = x - Math.sin(a) * off, fy = y + Math.cos(a) * off;
+    if (fy < g.top + 14 * s) return; // 部屋の中（玄関より下）だけ
+    this.prints.push({ x: fx, y: fy, a, side: p.side });
     if (this.prints.length > 600) this.prints.shift();
     p.side = -p.side; this.n++;
-    for (let k = 0; k < 3; k++) this.puffs.push({ x, y, vx: rnd(-80, 80) * s, vy: rnd(-120, -30) * s, life: rnd(0.3, 0.6), r: rnd(2, 4) * s });
-    sfx.crunch();
+    if (fx > g.rx && fx < g.rx + g.rw && fy > g.ry && fy < g.ry + g.rh) {
+      this.onRug++;
+      if (this.onRug === MUD_RUIN) { this.ruinT = 1.3; sfx.refill(); }
+    }
+    for (let k = 0; k < 2; k++) this.drops.push({ x: fx, y: fy, vx: rnd(-90, 90) * s, vy: rnd(-140, -40) * s, life: rnd(0.25, 0.5), r: rnd(1.5, 3.5) * s });
+    sfx.squelch();
   },
   update(dt) {
-    this.t += dt;
+    this.t += dt; this.ruinT = Math.max(0, this.ruinT - dt);
     const s = SC();
-    for (let i = this.puffs.length - 1; i >= 0; i--) { const p = this.puffs[i]; p.vy += 400 * s * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt; if (p.life <= 0) this.puffs.splice(i, 1); }
-    for (const f of this.flakes) { f.y += f.v * dt; if (f.y > 1.02) { f.y = -0.02; f.x = Math.random(); } }
+    for (let i = this.drops.length - 1; i >= 0; i--) { const p = this.drops[i]; p.vy += 500 * s * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt; if (p.life <= 0) this.drops.splice(i, 1); }
+  },
+  foot(p, s) { // はだしの泥の足あと（進む向きが +x）
+    ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.a);
+    ctx.fillStyle = 'rgba(96,62,32,.88)';
+    ctx.beginPath(); ctx.ellipse(1 * s, 0, 10 * s, 6 * s, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(-9 * s, 0, 6.5 * s, 5 * s, 0, 0, Math.PI * 2); ctx.fill();
+    // 指。親指は内側
+    [[13, 3.2, 2.6], [15.5, 1.2, 1.8], [15.5, -1.2, 1.6], [14.5, -3.4, 1.5], [12.5, -5.2, 1.3]].forEach(([fx, fy, r]) => {
+      ctx.beginPath(); ctx.arc(fx * s, fy * s * -p.side, r * s, 0, Math.PI * 2); ctx.fill();
+    });
+    ctx.restore();
   },
   draw() {
-    const s = SC(), hz = H * 0.2;
-    ctx.fillStyle = '#bcd9ef'; ctx.fillRect(0, 0, W, hz);
-    for (let i = 0; i < 9; i++) {
-      const x = W * (i / 8) + (sr(i) - 0.5) * 30, h = (44 + sr(i + 9) * 44) * s;
-      ctx.beginPath(); ctx.moveTo(x, hz - h); ctx.lineTo(x - h * 0.42, hz + 2); ctx.lineTo(x + h * 0.42, hz + 2); ctx.closePath(); ctx.fillStyle = '#5f8aa6'; ctx.fill();
-      ctx.beginPath(); ctx.moveTo(x, hz - h); ctx.lineTo(x - h * 0.16, hz - h * 0.62); ctx.lineTo(x + h * 0.16, hz - h * 0.62); ctx.closePath(); ctx.fillStyle = '#ffffff'; ctx.fill();
+    const g = this.geo(), s = g.s;
+    // 部屋の床（フローリング）
+    ctx.fillStyle = this.bg; ctx.fillRect(0, g.top, W, H - g.top);
+    ctx.strokeStyle = 'rgba(35,27,46,.16)'; ctx.lineWidth = 2; ctx.beginPath();
+    const pl = 34 * s;
+    for (let y = g.top, r = 0; y < H; y += pl, r++) {
+      ctx.moveTo(0, y); ctx.lineTo(W, y);
+      for (let x = (r % 2 ? 0.35 : 0.8) * W; x < W; x += W * 0.9) { ctx.moveTo(x, y); ctx.lineTo(x, y + pl); }
     }
-    ctx.fillStyle = this.bg; ctx.fillRect(0, hz, W, H - hz);
-    ctx.fillStyle = 'rgba(150,185,220,.18)';
-    for (let i = 0; i < 7; i++) { ctx.beginPath(); ctx.ellipse(W * sr(i * 2.3), hz + (H - hz) * sr(i * 4.1 + 2), W * 0.3, 18 * s, 0, 0, Math.PI * 2); ctx.fill(); }
-    ctx.fillStyle = 'rgba(35,27,46,.3)'; ctx.fillRect(0, hz, W, 3);
-    for (const p of this.prints) {
-      ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.a);
-      ctx.fillStyle = '#c2d4e8';
-      ctx.beginPath(); ctx.ellipse(5 * s, 0, 10 * s, 6.5 * s, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.ellipse(-10 * s, 0, 6 * s, 5.5 * s, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#a3bbd6';
-      ctx.beginPath(); ctx.ellipse(6 * s, 0.5 * s, 6.5 * s, 4 * s, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.ellipse(-10 * s, 0.5 * s, 3.5 * s, 3 * s, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.stroke();
+    // 玄関（タイルと、脱ぎ散らかした靴）
+    ctx.fillStyle = '#9aa0a8'; ctx.fillRect(0, 0, W, g.top);
+    ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.lineWidth = 2; ctx.beginPath();
+    for (let x = 0; x < W; x += 40 * s) { ctx.moveTo(x, 0); ctx.lineTo(x, g.top); }
+    for (let y = 0; y < g.top; y += 40 * s) { ctx.moveTo(0, y); ctx.lineTo(W, y); }
+    ctx.stroke();
+    [[0.3, 0.55, 0.5], [0.42, 0.75, -0.7]].forEach(([u, v, r]) => {
+      ctx.save(); ctx.translate(W * u, g.top * v); ctx.rotate(r);
+      rr(-22 * s, -10 * s, 44 * s, 20 * s, 9 * s); ctx.fillStyle = '#ff5a4e'; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = INK; ctx.stroke();
+      rr(-16 * s, -6 * s, 18 * s, 12 * s, 5 * s); ctx.fillStyle = '#7d5a3a'; ctx.fill();
+      ctx.restore();
+    });
+    ctx.fillStyle = '#8a5a32'; ctx.fillRect(0, g.top - 10 * s, W, 12 * s); // 上がりかまち
+    ctx.fillStyle = INK; ctx.fillRect(0, g.top + 2 * s, W, 3);
+    // じゅうたん
+    rr(g.rx, g.ry, g.rw, g.rh, 10 * s); ctx.fillStyle = '#f4ecdc'; ctx.fill(); ctx.lineWidth = 4; ctx.strokeStyle = INK; ctx.stroke();
+    rr(g.rx + 12 * s, g.ry + 12 * s, g.rw - 24 * s, g.rh - 24 * s, 6 * s); ctx.lineWidth = 6 * s; ctx.strokeStyle = '#c9563c'; ctx.stroke();
+    rr(g.rx + 24 * s, g.ry + 24 * s, g.rw - 48 * s, g.rh - 48 * s, 4 * s); ctx.lineWidth = 3 * s; ctx.strokeStyle = '#2f8fd6'; ctx.stroke();
+    ctx.fillStyle = 'rgba(201,86,60,.35)';
+    const cx = g.rx + g.rw / 2, cy = g.ry + g.rh / 2;
+    for (const [dx, dy] of [[0, 0], [-0.25, -0.25], [0.25, -0.25], [-0.25, 0.25], [0.25, 0.25]]) {
+      const x = cx + dx * g.rw, y = cy + dy * g.rh, r = 18 * s;
+      ctx.beginPath(); ctx.moveTo(x, y - r); ctx.lineTo(x + r, y); ctx.lineTo(x, y + r); ctx.lineTo(x - r, y); ctx.closePath(); ctx.fill();
+    }
+    if (this.onRug >= MUD_RUIN) { rr(g.rx, g.ry, g.rw, g.rh, 10 * s); ctx.fillStyle = 'rgba(96,62,32,.12)'; ctx.fill(); }
+    // 足あと
+    for (const p of this.prints) this.foot(p, s);
+    ctx.fillStyle = 'rgba(96,62,32,.9)';
+    for (const p of this.drops) { ctx.globalAlpha = Math.min(1, p.life * 4); ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill(); }
+    ctx.globalAlpha = 1;
+    if (this.ruinT > 0) {
+      const e = calm ? 1 : Math.min(1, (1.3 - this.ruinT) / 0.15);
+      ctx.save(); ctx.globalAlpha = Math.min(1, this.ruinT * 3); ctx.translate(W / 2, H * 0.55); ctx.rotate(-0.07); ctx.scale(1.5 - 0.5 * e, 1.5 - 0.5 * e);
+      bigText('クリーニング行き！', 0, 0, 40 * s, HOT, INK, W * 0.88);
       ctx.restore();
     }
-    ctx.fillStyle = '#ffffff'; ctx.strokeStyle = 'rgba(120,160,200,.6)'; ctx.lineWidth = 1;
-    for (const p of this.puffs) { ctx.globalAlpha = Math.min(1, p.life * 3); ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }
-    ctx.globalAlpha = 1;
-    ctx.strokeStyle = '#8fbbe3'; ctx.lineWidth = 2;
-    for (let i = 0; i < 18; i++) {
-      const a = Math.sin(this.t * 2.5 + i * 1.7); if (a < 0.6) continue;
-      const x = W * sr(i * 1.3 + 5), y = hz + (H - hz) * sr(i * 2.9 + 7), r = 6 * s * (a - 0.6) / 0.4;
-      ctx.beginPath(); ctx.moveTo(x - r, y); ctx.lineTo(x + r, y); ctx.moveTo(x, y - r); ctx.lineTo(x, y + r); ctx.stroke();
-    }
-    ctx.fillStyle = '#ffffff'; ctx.strokeStyle = 'rgba(120,160,200,.5)'; ctx.lineWidth = 1;
-    for (const f of this.flakes) { ctx.beginPath(); ctx.arc(f.x * W + Math.sin(this.t + f.ph) * 10, f.y * H, f.r * s, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }
   },
   drawHint(t) {
     const p = (t * 0.8) % 1;
-    finger(W / 2 + Math.sin(t * 3) * W * 0.25, H * 0.42 + p * H * 0.28, 0.9);
+    finger(W / 2 + Math.sin(t * 3) * W * 0.25, H * 0.4 + p * H * 0.3, 0.9);
   }
 };
 
 /* ---------- ステージ7: おもちゃ箱 ---------- */
+const TOY_LOST = 0.03; // 1個ごとに、行方不明になる確率
 const TOY_COLORS = ['#ff5a4e', '#2fb5a3', '#4f86f7', '#ffd23f', '#a66cf0', '#ff9e3d'];
 const toys = {
   key: 'toys', name: 'おもちゃ箱', prompt: 'ひっくり返せ！', hint: '上に はじく', bg: '#ffe6b0',
@@ -992,11 +1053,11 @@ const toys = {
     ['triangle', 0.15, '48 . 64 . 43 . 64 . 48 . 64 . 43 . 64 . 43 . 65 . 50 . 65 . 43 . 65 . 48 . 64 .']
   ], ['k.s.k.s.k.s.k.s.k.s.k.s.k.s.kss.']),
   shop: [['おもちゃ収納ボックス', 'おもちゃ 収納 ボックス']],
-  bill(t) { const n = t.toys || 0; return { v: n + '個', n: '1個ずつ拾って箱にもどす', sec: n * 5, yen: 0 }; },
-  init() { this.n = 0; this.items = []; this.ptr = {}; this.state = 'ready'; this.k = 0; this.t = 0; this.clat = 0; },
+  bill(t) { const n = t.toys || 0, l = t.lost || 0; return { v: n + '個', n: (l ? '失くしたおもちゃ ' + l + '個・' : '') + '拾って箱にもどす', sec: n * 3, yen: l * 500 }; },
+  init() { this.n = 0; this.lostN = 0; this.lostT = 0; this.queued = 0; this.items = []; this.ptr = {}; this.state = 'ready'; this.k = 0; this.t = 0; this.clat = 0; },
   started() { return this.n > 0; },
   result() { return this.n + '個'; },
-  commit(tot) { add(tot, 'toys', this.n); },
+  commit(tot) { add(tot, 'toys', this.n); add(tot, 'lost', this.lostN); },
   geo() { const s = SC(), bw = Math.min(W * 0.62, 250 * s), bh = bw * 0.62, floor = H * 0.7; return { s, cx: W / 2, bw, bh, floor, by: floor - bh }; },
   down(id, x, y) { this.ptr[id] = { x, y, t: clock }; },
   move(id, x, y) {
@@ -1007,15 +1068,17 @@ const toys = {
   },
   up(id) { if (id == null) this.ptr = {}; else delete this.ptr[id]; },
   fling(k) {
-    if (this.state !== 'ready') return;
+    if (this.state !== 'ready') { this.queued = k; return; } // 返している途中のフリックは覚えておき、次の箱が来たらすぐ返す
     const g = this.geo(), s = g.s, cnt = Math.round(9 + 7 * k);
     this.state = 'flip'; this.k = 0;
     for (let i = 0; i < cnt; i++) {
-      this.items.push({
+      const lost = Math.random() < TOY_LOST; // ときどき画面の外へ飛んでいって行方不明になる
+      this.items.push({ lost,
         type: Math.floor(Math.random() * 5), c: TOY_COLORS[Math.floor(Math.random() * TOY_COLORS.length)], ch: 'あいうえおABC'[Math.floor(Math.random() * 8)],
         x: g.cx + rnd(-g.bw * 0.3, g.bw * 0.3), y: g.by + g.bh * 0.3, vx: rnd(-1, 1) * 520 * k * s, vy: -rnd(650, 1150) * k * s,
         r: rnd(0, 6), vr: rnd(-10, 10), sz: rnd(16, 26) * s, land: rnd(g.floor + 8 * s, H - 18 * s), b: 0, rest: false
       });
+      if (lost) { const it = this.items[this.items.length - 1]; it.vx = (Math.random() < 0.5 ? -1 : 1) * rnd(300, 600) * s; it.vy = -rnd(1700, 2100) * s; }
     }
     this.n += cnt;
     if (this.items.length > 240) this.items.splice(0, this.items.length - 240);
@@ -1024,11 +1087,14 @@ const toys = {
   update(dt) {
     this.t += dt; this.clat = Math.max(0, this.clat - dt);
     const s = SC();
-    if (this.state === 'flip') { this.k += dt / 0.4; if (this.k >= 1) { this.k = 0; this.state = 'swap'; } }
-    else if (this.state === 'swap') { this.k += dt / 0.35; if (this.k >= 1) { this.k = 0; this.state = 'ready'; } }
-    for (const it of this.items) {
+    this.lostT = Math.max(0, this.lostT - dt);
+    if (this.state === 'flip') { this.k += dt / 0.25; if (this.k >= 1) { this.k = 0; this.state = 'swap'; } }
+    else if (this.state === 'swap') { this.k += dt / 0.2; if (this.k >= 1) { this.k = 0; this.state = 'ready'; if (this.queued) { const q = this.queued; this.queued = 0; this.fling(q); } } }
+    for (let i = this.items.length - 1; i >= 0; i--) {
+      const it = this.items[i];
       if (it.rest) continue;
       it.vy += 2000 * s * dt; it.x += it.vx * dt; it.y += it.vy * dt; it.r += it.vr * dt;
+      if (it.lost) { if (it.y < -80 * s) { this.items.splice(i, 1); if (scoring()) { this.lostN++; this.lostT = 1.1; sfx.lost(); } } continue; }
       if (it.x < it.sz) { it.x = it.sz; it.vx = Math.abs(it.vx) * 0.5; }
       if (it.x > W - it.sz) { it.x = W - it.sz; it.vx = -Math.abs(it.vx) * 0.5; }
       if (it.vy > 0 && it.y >= it.land) {
@@ -1103,6 +1169,7 @@ const toys = {
     const rest = this.items.filter(i => i.rest).sort((a, b) => a.y - b.y);
     for (const it of rest) this.toy(it);
     for (const it of this.items) if (!it.rest) this.toy(it);
+    if (this.lostT > 0) bigText(this.lostN + '個 行方不明！', W / 2, H * 0.3, 34 * s, HOT, INK, W * 0.8);
   },
   drawHint(t) {
     const g = this.geo(), p = (t * 1.3) % 1;
@@ -1118,20 +1185,26 @@ const puddle = {
     ['square', 0.05, '38 . . 38 . . 45 . 43 . . 41 . . 40 . 38 . . 38 . . 45 . 47 . . 48 . . 45 .']
   ], ['k..s..k.k.s..h.hk..s..k.k.s.sss.']),
   shop: [['泥汚れ用の洗剤', '泥汚れ 洗剤'], ['子ども用レインコート', 'キッズ レインコート']],
-  bill(t) { const n = t.puddle || 0, j = t.jumps || 0; return { v: n + 'か所', n: '泥はね（' + j + '回ジャンプ）・服と長靴を洗う', sec: n * 20, yen: 0 }; },
+  bill(t) { const n = t.puddle || 0, c = t.clothes || 0; return { v: n + 'か所', n: '泥はね' + (c ? '・買い替えた服 ' + c + '着' : '・服と長靴を洗う'), sec: n * 10, yen: c * 1000 }; },
   init() {
-    this.spots = 0; this.jumps = 0; this.hold = null; this.charge = 0; this.state = 'ready'; this.k = 0; this.power = 0; this.t = 0; this.shake = 0; this.ct = 0;
+    this.spots = 0; this.jumps = 0; this.ruined = false; this.ruinT = 0; this.queued = null; this.hold = null; this.charge = 0; this.state = 'ready'; this.k = 0; this.power = 0; this.t = 0; this.shake = 0; this.ct = 0;
     this.drops = []; this.mud = []; this.rings = [];
     this.shape = []; for (let i = 0; i < 14; i++) this.shape.push(0.82 + Math.random() * 0.3);
   },
   started() { return this.jumps > 0 || this.state === 'charge'; },
   result() { return this.spots + 'か所'; },
-  commit(tot) { add(tot, 'puddle', this.spots); add(tot, 'jumps', this.jumps); },
+  commit(tot) { add(tot, 'puddle', this.spots); add(tot, 'jumps', this.jumps); add(tot, 'clothes', this.ruined ? 1 : 0); },
   geo() { const s = SC(); return { s, cx: W / 2, cy: H * 0.5, R: Math.min(W * 0.42, H * 0.3) }; },
-  down(id) { if (this.state !== 'ready' || this.hold != null) return; this.hold = id; this.charge = 0; this.state = 'charge'; },
+  down(id) {
+    if (this.hold != null) return;
+    if (this.state === 'air') { this.queued = id; return; } // 空中で押したら、着地してすぐタメに入る
+    if (this.state !== 'ready' && this.state !== 'land') return;
+    this.hold = id; this.charge = 0; this.state = 'charge';
+  },
   move() {},
   up(id) {
-    if (id == null) { this.hold = null; if (this.state === 'charge') this.state = 'ready'; return; }
+    if (id == null) { this.hold = null; this.queued = null; if (this.state === 'charge') this.state = 'ready'; return; }
+    if (id === this.queued) { this.queued = null; return; }
     if (id !== this.hold) return;
     this.hold = null;
     if (this.state === 'charge') { this.power = Math.max(0.15, this.charge); this.state = 'air'; this.k = 0; this.jumps++; sfx.jump(); }
@@ -1140,10 +1213,11 @@ const puddle = {
     this.t += dt; this.shake = Math.max(0, this.shake - dt * 3);
     const g = this.geo(), s = g.s;
     if (this.state === 'charge') {
-      this.charge = Math.min(1, this.charge + dt / 0.7);
+      this.charge = Math.min(1, this.charge + dt / 0.5);
       this.ct -= dt; if (this.ct <= 0 && this.charge < 1) { this.ct = 0.09; sfx.charge(this.charge); }
-    } else if (this.state === 'air') { this.k += dt / 0.32; if (this.k >= 1) this.splash(); }
-    else if (this.state === 'land') { this.k += dt / 0.3; if (this.k >= 1) { this.state = 'ready'; this.charge = 0; } }
+    } else if (this.state === 'air') { this.k += dt / 0.22; if (this.k >= 1) this.splash(); }
+    else if (this.state === 'land') { this.k += dt / 0.12; if (this.k >= 1) { this.state = 'ready'; this.charge = 0; } }
+    this.ruinT = Math.max(0, this.ruinT - dt);
     for (let i = this.drops.length - 1; i >= 0; i--) {
       const d = this.drops[i]; d.x += d.vx * dt; d.y += d.vy * dt; d.vy += 900 * s * dt; d.life -= dt;
       if (d.life <= 0) this.drops.splice(i, 1);
@@ -1166,7 +1240,11 @@ const puddle = {
       this.mud.push({ x: W / 2 + Math.cos(a) * W * 0.55 * d, y: H * 0.55 + Math.sin(a) * H * 0.45 * d, r: rnd(8, 22) * s * (0.6 + p), seed: Math.random() * 99 });
     }
     if (this.mud.length > 160) this.mud.splice(0, this.mud.length - 160);
-    if (scoring()) this.spots += nm; // 時間切れのあとに着地した分は数えない
+    if (scoring()) {
+      this.spots += nm; // 時間切れのあとに着地した分は数えない
+      if (p >= 1 && !this.ruined) { this.ruined = true; this.ruinT = 1.3; } // タメ最大で飛び込むと、服がもうだめ
+    }
+    if (this.queued != null) { this.hold = this.queued; this.queued = null; this.state = 'charge'; this.charge = 0; }
     this.rings.push({ x: g.cx, y: g.cy, k: 0, d: 0.6, r: g.R * 1.1 });
     sfx.splash(p);
   },
@@ -1242,6 +1320,7 @@ const puddle = {
         ctx.beginPath(); ctx.arc(m.x + Math.cos(a) * d, m.y + Math.sin(a) * d, m.r * (0.15 + sr(m.seed + k + 3) * 0.25), 0, Math.PI * 2); ctx.fill();
       }
     }
+    if (this.ruinT > 0) bigText('服がもうダメ！', W / 2, H * 0.3, 40 * s, HOT, INK, W * 0.85);
   },
   drawHint(t) {
     const g = this.geo(), p = (t * 1.1) % 1;
@@ -1258,7 +1337,7 @@ const hose = {
     ['square', 0.05, '40 . 40 . 52 . 40 . 43 . 43 . 55 . 43 . 45 . 45 . 57 . 45 . 47 . 47 . 59 . 47 .']
   ], ['k.h.s.hkk.h.s.hhk.h.s.hkk.h.s.hh']),
   shop: [['ホースリール', 'ホースリール']],
-  bill(t) { const L = t.hose || 0, w = t.wet || 0; return { v: Math.floor(L) + 'L', n: '洗濯物 びしょぬれ ' + w + '枚・洗い直し', sec: w * 300, yen: L * 0.25 + w * 10 }; },
+  bill(t) { const L = t.hose || 0, w = t.wet || 0; return { v: Math.floor(L) + 'L', n: '洗濯物 びしょぬれ ' + w + '枚・洗い直し', sec: w * 180, yen: L * 0.25 + w * 10 }; },
   init() {
     this.open = 0; this.ang = 0; this.L = 0; this.ptr = {}; this.parts = []; this.pools = []; this.t = 0; this.click = 0; this.full = 0; this.wt = 0; this.tip = null;
     const kinds = ['shirt', 'towel', 'sock', 'shorts', 'towel', 'sock'], cols = ['#ff8a8a', '#ffffff', '#8ac6ff', '#ffd23f', '#b6f0c2', '#ffb4e0'];
@@ -1397,6 +1476,7 @@ const hose = {
 
 /* ---------- ステージ10: エレベーター ---------- */
 const EC = 3, ER = 8; // ボタンの列と段
+const ELEV_BREAK = 0.04; // 全部押し終えるたびに、故障する確率（めったに起きないが、起きるといちばん効く）
 const elev = {
   key: 'elev', name: 'エレベーター', prompt: '全部押せ！', hint: 'タップ、またはなぞって全部', bg: '#c9ced6',
   bgm: song(108, [ // エレベーターの中に流れていそうな音楽
@@ -1404,11 +1484,14 @@ const elev = {
     ['triangle', 0.12, '48 . . 55 48 . . 55 50 . . 57 50 . . 57 43 . . 50 43 . . 50 48 . . 55 48 . . 55']
   ], ['r..r..r...r..r..r..r..r...r..r..', 'h.h.h.h.h.h.h.h.h.h.h.h.h.h.h.h.'], { every: 8, v: 'ep', vol: 0.03, chords: [[64, 67, 71], [62, 65, 69], [59, 62, 65], [64, 67, 71]] }),
   shop: null,
-  bill(t) { const n = t.elev || 0; return { v: n + '階分', n: '全部の階に止まる（乗り合わせた人も巻きぞえ）', sec: n * 15, yen: 0 }; },
-  init() { this.n = 0; this.lit = new Array(EC * ER).fill(0); this.old = null; this.slide = 0; this.wait = 0; this.t = 0; this.ptr = {}; this.cars = 1; this.banner = 0; },
+  bill(t) {
+    const n = t.elev || 0, b = t.broke || 0;
+    return { v: n + '階分', n: b ? '故障させて点検（作業員の出動費）' + (b > 1 ? b + '回' : '') : '全部の階に止まる（乗り合わせた人も巻きぞえ）', sec: n * 10 + b * 7200, yen: b * 20000 };
+  },
+  init() { this.n = 0; this.lit = new Array(EC * ER).fill(0); this.old = null; this.slide = 0; this.wait = 0; this.t = 0; this.ptr = {}; this.cars = 1; this.banner = 0; this.broken = false; this.breakT = 0; },
   started() { return this.n > 0; },
   result() { return this.n + '階分'; },
-  commit(tot) { add(tot, 'elev', this.n); },
+  commit(tot) { add(tot, 'elev', this.n); add(tot, 'broke', this.broken ? 1 : 0); },
   geo() {
     const s = SC(), pw = Math.min(W * 0.72, 270 * s), ph = Math.min(H * 0.78, pw * 2.4);
     const x = (W - pw) / 2, y = H * 0.13 + (H * 0.83 - ph) / 2, top = y + ph * 0.15, cw = pw / EC, ch = ph * 0.72 / ER;
@@ -1418,19 +1501,22 @@ const elev = {
   center(i, g) { return [g.x + (i % EC + 0.5) * g.cw, g.top + (Math.floor(i / EC) + 0.5) * g.ch]; },
   buttons() { const g = this.geo(); return this.lit.map((_, i) => this.center(i, g)); },
   press(x, y, reach) {
-    if (this.slide > 0 || this.wait > 0) return;
+    if (this.slide > 0 || this.wait > 0 || this.broken) return;
     const g = this.geo();
     let best = -1, bd = g.r * reach;
     this.lit.forEach((v, i) => { const c = this.center(i, g), d = Math.hypot(x - c[0], y - c[1]); if (d < bd) { bd = d; best = i; } });
     if (best < 0 || this.lit[best]) return;
     this.lit[best] = 1; this.n++; sfx.ding(this.floor(best));
-    if (this.lit.every(Boolean)) this.wait = 0.2; // 全部光ったら次のエレベーターへ
+    if (this.lit.every(Boolean)) { // 全部光ったら次のエレベーターへ。ごくまれに故障する
+      if (Math.random() < (this.forceBreak ? 1 : ELEV_BREAK)) { this.broken = true; this.breakT = 1.8; sfx.broke(); }
+      else this.wait = 0.2;
+    }
   },
   down(id, x, y) { this.ptr[id] = 1; this.press(x, y, 1.5); },
   move(id, x, y) { if (this.ptr[id]) this.press(x, y, 1.2); }, // なぞっても押せる（押している指だけ）
   up(id) { if (id == null) this.ptr = {}; else delete this.ptr[id]; },
   update(dt) {
-    this.t += dt; this.banner = Math.max(0, this.banner - dt);
+    this.t += dt; this.banner = Math.max(0, this.banner - dt); this.breakT = Math.max(0, this.breakT - dt);
     if (this.wait > 0) {
       this.wait -= dt;
       if (this.wait <= 0) { this.wait = 0; this.old = this.lit; this.lit = new Array(EC * ER).fill(0); this.slide = 1; this.cars++; this.banner = 1; sfx.slide(); }
@@ -1447,7 +1533,8 @@ const elev = {
     const dw = g.pw * 0.6, dh = g.ph * 0.08, dx = g.x + (g.pw - dw) / 2, dy = g.y + g.ph * 0.035;
     rr(dx, dy, dw, dh, 6 * s); ctx.fillStyle = '#1c1820'; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = INK; ctx.stroke();
     ctx.fillStyle = '#ffb84d'; ctx.font = `${Math.round(dh * 0.6)}px ${DISPLAY}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText('▲ ' + (1 + Math.floor(this.t * 3) % 24), dx + dw / 2, dy + dh / 2 + 1);
+    if (this.broken) { ctx.fillStyle = HOT; ctx.fillText(Math.floor(this.t * 4) % 2 ? '故障中' : '', dx + dw / 2, dy + dh / 2 + 1); }
+    else ctx.fillText('▲ ' + (1 + Math.floor(this.t * 3) % 24), dx + dw / 2, dy + dh / 2 + 1);
     lit.forEach((v, i) => {
       const [cx, cy] = this.center(i, g);
       if (v) { ctx.beginPath(); ctx.arc(cx, cy, g.r * 1.35, 0, Math.PI * 2); ctx.fillStyle = 'rgba(255,170,60,.35)'; ctx.fill(); }
@@ -1465,6 +1552,7 @@ const elev = {
         ctx.beginPath(); ctx.moveTo(tip, by); ctx.lineTo(back, by - a * 0.8); ctx.lineTo(back, by + a * 0.8); ctx.closePath(); ctx.fill();
       }
     });
+    if (this.broken) { rr(g.x, g.y + g.ph * 0.13, g.pw, g.ph * 0.87, 10 * s); ctx.fillStyle = 'rgba(28,24,32,.55)'; ctx.fill(); } // 明かりが消える
     ctx.restore();
   },
   draw() {
@@ -1476,6 +1564,12 @@ const elev = {
       const e = calm ? 1 : Math.min(1, (1 - this.banner) / 0.15), g = this.geo();
       ctx.save(); ctx.globalAlpha = Math.min(1, this.banner * 4); ctx.translate(W / 2, g.top + g.ch * 3.5); ctx.rotate(-0.08); ctx.scale(1.6 - 0.6 * e, 1.6 - 0.6 * e);
       bigText(this.cars + '台目！', 0, 0, 56 * g.s, POP, INK, W * 0.8);
+      ctx.restore();
+    }
+    if (this.breakT > 0 || this.broken) {
+      const g = this.geo(), e = calm ? 1 : Math.min(1, (1.8 - this.breakT) / 0.15), sh = calm ? 0 : this.breakT * 5;
+      ctx.save(); ctx.translate(W / 2 + rnd(-sh, sh), g.top + g.ch * 3.5); ctx.rotate(0.06); ctx.scale(1.8 - 0.8 * e, 1.8 - 0.8 * e);
+      bigText('故障！', 0, 0, 64 * g.s, HOT, INK, W * 0.8);
       ctx.restore();
     }
   },
@@ -1491,7 +1585,7 @@ const nopush = {
     ['sawtooth', 0.05, '45 45 . 45 45 . 45 . 44 44 . 44 44 . 44 . 45 45 . 45 45 . 45 . 46 46 . 46 46 . 46 .']
   ], ['k.s.k.s.kks.k.ssk.s.k.s.kks.k.ss']),
   shop: null,
-  bill(t) { const n = t.nopush || 0; return { v: n + '回', n: '「絶対押すな」と書いてあったのに（怒られ度に上乗せ）', sec: 0, yen: 0, angry: n }; },
+  bill(t) { const n = t.nopush || 0; return { v: n + '回', n: '「絶対押すな」と書いてあったのに（怒られ度に上乗せ）', sec: 0, yen: 0, angry: Math.round(n / 2) }; },
   init() { this.n = 0; this.press = 0; this.flash = 0; this.shake = 0; this.t = 0; this.msg = ''; this.mt = 0; },
   started() { return this.n > 0; },
   result() { return this.n + '回'; },
@@ -1550,7 +1644,7 @@ const nopush = {
 };
 
 /* ---------- 進行 ---------- */
-const NORMAL = [tissue, toilet, shoji, paste, shampoo, snow, toys, puddle, hose, elev];
+const NORMAL = [tissue, toilet, shoji, paste, shampoo, mud, toys, puddle, hose, elev];
 const BONUS = nopush;
 const N = NORMAL.length;
 const ROUNDS = 2;          // 周回モードの周回数（全ステージが揃ってから調整）
@@ -1619,9 +1713,10 @@ function fmtTime(sec) {
   const m = Math.round(sec / 60);
   return m < 60 ? m + '分' : Math.floor(m / 60) + '時間' + (m % 60 ? (m % 60) + '分' : '');
 }
+// 判定の段階（0〜5）。挑戦状の入口ページ c/段階.html もこの段階で分ける
+const tierOf = a => a < 1 ? 0 : a < 30 ? 1 : a < 70 ? 2 : a < 120 ? 3 : a < 200 ? 4 : 5;
 function verdict(a) {
-  return a < 1 ? 'まだバレてない' : a < 30 ? '正座10分' : a < 60 ? 'おやつ抜き' : a < 100 ? '家族会議' :
-    a < 200 ? 'おこづかい3か月停止' : '伝説のいたずらっ子';
+  return ['まだバレてない', '正座10分', 'おやつ抜き', '家族会議', 'おこづかい3か月停止', '伝説のいたずらっ子'][tierOf(a)];
 }
 function buildResult() {
   const rows = [];
@@ -1633,7 +1728,7 @@ function buildResult() {
     sec += b.sec || 0; yen += b.yen || 0; extra += b.angry || 0;
   }
   yen = Math.round(yen);
-  // 怒られ度（%）: 損害100円で1%、後始末2分で1%、ほかに押すなボタンの回数など。目安値で、全ステージが揃ってから調整する
+  // 怒られ度（%）: 損害100円で1%、後始末2分で1%、押すなボタンは2回で1%。単価は各ステージの bill() にある
   const angry = Math.min(999, Math.round(yen / 100 + sec / 120 + extra));
   const tb = 0.3 + rows.length * 0.09 + 0.2;
   return { rows, sec, yen, angry, word: verdict(angry), tb, ts: tb + 0.85, shown: 0, stamped: false };
@@ -1646,6 +1741,7 @@ function finish() {
   panels.result.hidden = false; measureBar();
   $('recHint').textContent = rec ? '動画を書き出し中です…' : (recOn && canRec ? '録画を開始できませんでした。' + (recErr ? '（' + recErr + '）' : '') : '');
   fillShop();
+  $('xpost').textContent = gameMode === 'loop' ? 'Xで挑戦状' : 'Xでポスト';
   sfx.final();
 }
 function goTitle() {
@@ -1762,7 +1858,7 @@ function fitText(str, x, y, maxW, font, align) {
 function drawResult() {
   burst();
   if (!res) return;
-  const n = res.rows.length, fixed = 18 + 24 + 12 + 12 + 128 + 14 + 70 + 8 + 34 + 18 + 14;
+  const vs = vsText(), n = res.rows.length, fixed = 18 + 24 + 12 + 12 + 128 + 14 + 70 + 8 + (vs ? 28 : 0) + 34 + 18 + 14;
   const top = 14, avail = Math.max(200, H - barH - top - 20);
   // 縦に収まらず小さくなりすぎるときは、各行の補足を省いて行を詰める
   const compact = avail / (fixed + n * 38) < 0.85, RH = compact ? 27 : 38, need = fixed + n * RH;
@@ -1822,6 +1918,10 @@ function drawResult() {
     ctx.restore();
   }
   y += 70 + 8;
+  if (vs) { // 挑戦状の結果
+    if (rt >= res.ts) { ctx.fillStyle = INK; fitText(vs, cw / 2, y + 10, cw - 40, `900 16px ${BODY}`, 'center'); }
+    y += 28;
+  }
   ctx.fillStyle = '#6b6178'; ctx.font = `700 11px ${BODY}`; ctx.textAlign = 'center';
   ctx.fillText('時間と金額はざっくりした目安です。', cw / 2, y + 8);
   ctx.fillText('実際にやると本当に怒られます。', cw / 2, y + 25);
@@ -1885,9 +1985,20 @@ function recPause(v) {
 
 /* ---------- シェア・買い直し ---------- */
 const AMAZON_TAG = '202610jokesite-22';
+// 挑戦状：周回モードの結果だけ。開いた人に「この怒られ度を超えろ」と出す（無限モードは長く続けるほど増えるので比べない）
+let challenge = null;
+try { const v = parseInt(new URLSearchParams(location.search).get('vs'), 10); if (v >= 0 && v <= 999) challenge = v; } catch (e) {}
+function vsText() {
+  if (challenge == null || gameMode !== 'loop' || !res) return '';
+  return res.angry > challenge ? '挑戦状の ' + challenge + '% を超えた！' : res.angry === challenge ? '挑戦状の ' + challenge + '% と引き分け' : '挑戦状の ' + challenge + '% に届かず…';
+}
+// c/段階.html は判定ごとのカード画像を持つ入口ページ（開くと本体へ転送される）
+const challengeUrl = () => SITE + 'c/' + tierOf(res.angry) + '.html?vs=' + res.angry;
 function shareText() {
-  return 'いたずラッシュで遊んだ結果\n損害額 ' + res.yen.toLocaleString('ja-JP') + '円／後始末 ' + fmtTime(res.sec) +
-    '\n怒られ度 ' + res.angry + '%【' + res.word + '】\n#いたずラッシュ';
+  const head = 'いたずラッシュで怒られ度 ' + res.angry + '%【' + res.word + '】\n損害額 ' + res.yen.toLocaleString('ja-JP') + '円／後始末 ' + fmtTime(res.sec);
+  if (gameMode !== 'loop') return head + '（無限モード）\n#いたずラッシュ\n' + SITE;
+  const vs = vsText();
+  return head + (vs ? '\n' + vs : '') + '\nこの記録、超えられる？\n#いたずラッシュ\n' + challengeUrl();
 }
 function saveBlob(blob, name, text) {
   let file = null;
@@ -1936,11 +2047,11 @@ $('shopBtn').addEventListener('click', () => { panels.shop.hidden = false; });
 $('shopClose').addEventListener('click', () => { panels.shop.hidden = true; });
 $('xpost').addEventListener('click', () => {
   if (!res) return;
-  window.open('https://twitter.com/intent/tweet?text=' + encodeURIComponent(shareText()) + '&url=' + encodeURIComponent(SITE), '_blank', 'noopener');
+  window.open('https://twitter.com/intent/tweet?text=' + encodeURIComponent(shareText()), '_blank', 'noopener'); // URLは本文に入っている
 });
 $('saveVid').addEventListener('click', () => {
   if (!recBlob || !res) return;
-  saveBlob(recBlob, 'itazu-rush-' + res.yen + 'yen.' + (recBlob.type.indexOf('mp4') >= 0 ? 'mp4' : 'webm'), shareText() + '\n' + SITE);
+  saveBlob(recBlob, 'itazu-rush-' + res.yen + 'yen.' + (recBlob.type.indexOf('mp4') >= 0 ? 'mp4' : 'webm'), shareText());
   $('recHint').textContent = '動画を書き出しました。';
 });
 function setSound(v) {
@@ -1958,6 +2069,10 @@ setSound(soundOn);
 if (canRec) { $('recOpt').hidden = false; $('recNote').hidden = false; $('recChk').checked = recOn; }
 $('chips').innerHTML = NORMAL.map(s => '<li>' + s.name + '</li>').join('') + (BONUS ? '<li class="secret">？？？</li>' : '');
 $('startSub').textContent = '全' + N + '種を' + ROUNDS + '周';
+if (challenge != null) {
+  $('challenge').textContent = '挑戦状が届いています。「はじめる」で、怒られ度 ' + challenge + '%（判定：' + verdict(challenge) + '）を超えてください。';
+  $('challenge').hidden = false;
+}
 window.addEventListener('resize', () => { if (mode === 'result') measureBar(); });
 document.addEventListener('visibilitychange', () => { if (document.hidden) setPause(true); });
 if (document.fonts && document.fonts.load) {
