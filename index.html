@@ -37,7 +37,7 @@ body{height:100%;margin:0;background:var(--ink);color:var(--ink);font-family:var
 #pauseBtn{pointer-events:auto;width:44px;height:44px;border-radius:50%;border:3px solid var(--ink);background:var(--paper);color:var(--ink);font-family:var(--display);font-size:16px;cursor:pointer;display:grid;place-items:center;padding:0}
 
 .panel{position:absolute;inset:0;display:flex;padding:16px 20px 24px 16px;overflow:auto}
-#pause,#shop{background:rgba(35,27,46,.62)}
+#pause,#shop,#zukan{background:rgba(35,27,46,.62)}
 .card{margin:auto;width:100%;max-width:400px;background:var(--paper);border:4px solid var(--ink);border-radius:6px;box-shadow:8px 8px 0 var(--ink);padding:22px 20px;display:flex;flex-direction:column;gap:16px}
 .tag{align-self:flex-start;font-size:12px;font-weight:900;letter-spacing:.08em;background:var(--ink);color:var(--pop);padding:3px 9px;border-radius:3px}
 h1{font-family:var(--display);font-weight:400;font-size:clamp(34px,11vw,48px);line-height:1.05;margin:0;text-wrap:balance;transform:rotate(-2deg);transform-origin:left center}
@@ -68,6 +68,13 @@ button:focus-visible,input:focus-visible,a:focus-visible{outline:3px solid var(-
 .minirow{display:flex;gap:6px}
 button.mini{flex:1 1 0;min-width:0;font-family:var(--body);font-weight:900;font-size:13px;line-height:1.3;padding:8px 2px;border:3px solid var(--ink);border-radius:6px;background:var(--paper);color:var(--ink);cursor:pointer;white-space:nowrap}
 button.mini:active{transform:translate(2px,2px)}
+.zukanbtn{font-family:var(--body);font-weight:900;font-size:15px;padding:10px 12px;border:3px solid var(--ink);border-radius:6px;background:var(--pop);color:var(--ink);cursor:pointer;display:flex;justify-content:space-between;align-items:center}
+.zukanbtn b{font-family:var(--display);font-weight:400}
+.zlist{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px}
+.zlist li{border:2px solid rgba(35,27,46,.3);border-radius:6px;padding:6px 8px;background:#f1eef3;color:var(--mute);display:flex;flex-direction:column;gap:2px}
+.zlist li.got{border-color:var(--ink);background:#fff6cf;color:var(--ink)}
+.zlist b{font-size:13px;font-weight:900}
+.zlist span{font-size:11px;line-height:1.5}
 .shoplist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
 .shoplist a{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 12px;border:3px solid var(--ink);border-radius:6px;background:#fff;color:var(--ink);text-decoration:none;font-weight:700;font-size:14px}
 .shoplist small{color:var(--mute);font-size:12px;white-space:nowrap}
@@ -96,6 +103,7 @@ button.mini:active{transform:translate(2px,2px)}
         <label class="opt" for="soundChk"><input type="checkbox" id="soundChk" checked>音を出す</label>
         <label class="opt" for="recChk" id="recOpt" hidden><input type="checkbox" id="recChk">録画する</label>
       </div>
+      <button class="zukanbtn" id="zukanBtn" type="button">いたずら図鑑 <b id="zukanCount">0/0</b></button>
       <p class="small" id="recNote" hidden>録画すると、プレイから結果までを音つきの動画で保存できます（音を出さない設定でも、動画には音が入ります）。</p>
       <p class="small">周回ごとに速くなります。失敗はありません。右上の一時停止ボタンでいつでも中断できます。</p>
       <p class="small">※いたずらをすすめるものではありません。画面の中だけで楽しんでください。</p>
@@ -124,6 +132,16 @@ button.mini:active{transform:translate(2px,2px)}
         <button class="mini" id="home2Btn" type="button">タイトル</button>
       </div>
       <p class="small" id="recHint" role="status"></p>
+    </div>
+  </section>
+
+  <section class="panel" id="zukan" hidden>
+    <div class="card">
+      <div class="tag">あつめた称号</div>
+      <h2>いたずら図鑑</h2>
+      <p class="small" id="zukanSum"></p>
+      <ul class="zlist" id="zukanList"></ul>
+      <button class="big sub" id="zukanClose" type="button">とじる</button>
     </div>
   </section>
 
@@ -356,7 +374,7 @@ const tissue = {
   init() { this.n = 0; this.need = 0; this.lean = 1; this.pop = 1; this.shake = 0; this.fly = []; this.set = []; this.ptr = {}; this.t = 0; },
   started() { return this.n > 0; },
   result() { return this.n + '枚'; },
-  commit(tot) { add(tot, 'tissue', this.n); },
+  commit(tot) { add(tot, 'tissue', this.n); mx(tot, 'tissueMax', this.n); },
   box() { const bw = Math.min(W * 0.62, 290), bh = bw * 0.5; return { cx: W / 2, top: H * 0.6, bw, bh }; },
   down(id, x) { this.ptr[id] = { x, acc: 0 }; },
   move(id, x) {
@@ -463,7 +481,7 @@ const toilet = {
   init() { this.len = 0; this.vel = 0; this.pend = 0; this.ptr = {}; this.tick = 0; this.rolls = 0; this.refill = 0; },
   started() { return this.len > 30; },
   result() { return (this.len / PXM).toFixed(1) + 'm'; },
-  commit(tot) { add(tot, 'tp', this.len); },
+  commit(tot) { add(tot, 'tp', this.len); mx(tot, 'tpMax', this.len / PXM); },
   down(id, x, y) { this.ptr[id] = y; },
   move(id, x, y) {
     if (!(id in this.ptr)) return;
@@ -576,6 +594,8 @@ const shoji = {
     add(tot, 'holes', this.n);
     const cur = this.panes.filter(Boolean).length;
     tot.shojiF = (tot.shojiF || []).concat(this.faceHoles, cur ? [cur] : []); // 面ごとの穴の数
+    mx(tot, 'shojiFullMax', this.faceHoles.filter(h => h > SHOJI_PATCH).length + (cur > SHOJI_PATCH ? 1 : 0));
+    if (this.n === 1) tot.shojiOne = 1;
   },
   geo() {
     const w = Math.min(W * 0.86, 420), h = Math.min(H * 0.72, w * 1.6);
@@ -725,7 +745,7 @@ const paste = {
   init() { this.cm = 0; this.ptr = {}; this.pend = 0; this.speed = 0; this.room = 0; this.pinch = -1; this.slip = 0; this.flow = 0; this.used = 0; this.refill = 0; this.acc = 0; this.t = 0; },
   started() { return this.cm > 0.5; },
   result() { return fmtLen(this.cm); },
-  commit(tot) { add(tot, 'paste', this.cm); },
+  commit(tot) { add(tot, 'paste', this.cm); mx(tot, 'pasteMax', this.cm); },
   // なぞった長さだけ押し出す。出る速さには上限があり、速すぎると指がすべってほとんど出ない（ゆっくり何度もしぼるのがいちばん出る）
   down(id, x, y) { this.ptr[id] = y; this.setPinch(y); },
   move(id, x, y) {
@@ -851,7 +871,7 @@ const shampoo = {
   init() { this.n = 0; this.press = 0; this.used = 0; this.refill = 0; this.globs = []; this.blobs = []; this.bubbles = []; this.t = 0; },
   started() { return this.n > 0; },
   result() { return this.n + 'プッシュ'; },
-  commit(tot) { add(tot, 'shampoo', this.n); },
+  commit(tot) { add(tot, 'shampoo', this.n); mx(tot, 'shampooMax', this.n); },
   geo() {
     const s = SC(), floor = H * 0.8, bw = 100 * s, bh = 160 * s, bx = W * 0.3, hy = floor - bh - 52 * s + this.press * 16 * s;
     return { s, floor, bw, bh, bx, by: floor - bh, hy, nx: bx + 66 * s, ny: hy + 7 * s };
@@ -1055,10 +1075,10 @@ const toys = {
   ], ['k.s.k.s.k.s.k.s.k.s.k.s.k.s.kss.']),
   shop: [['おもちゃ収納ボックス', 'おもちゃ 収納 ボックス']],
   bill(t) { const n = t.toys || 0, l = t.lost || 0; return { v: n + '個', n: (l ? '失くしたおもちゃ ' + l + '個・' : '') + '拾って箱にもどす', sec: n * 3, yen: l * 500 }; },
-  init() { this.n = 0; this.lostN = 0; this.lostT = 0; this.queued = 0; this.items = []; this.ptr = {}; this.state = 'ready'; this.k = 0; this.t = 0; this.clat = 0; },
+  init() { this.n = 0; this.boxes = 0; this.lostN = 0; this.lostT = 0; this.queued = 0; this.items = []; this.ptr = {}; this.state = 'ready'; this.k = 0; this.t = 0; this.clat = 0; },
   started() { return this.n > 0; },
   result() { return this.n + '個'; },
-  commit(tot) { add(tot, 'toys', this.n); add(tot, 'lost', this.lostN); },
+  commit(tot) { add(tot, 'toys', this.n); add(tot, 'lost', this.lostN); mx(tot, 'boxMax', this.boxes); },
   geo() { const s = SC(), bw = Math.min(W * 0.62, 250 * s), bh = bw * 0.62, floor = H * 0.7; return { s, cx: W / 2, bw, bh, floor, by: floor - bh }; },
   down(id, x, y) { this.ptr[id] = { x, y, t: clock }; },
   move(id, x, y) {
@@ -1071,7 +1091,7 @@ const toys = {
   fling(k) {
     if (this.state !== 'ready') { this.queued = k; return; } // 返している途中のフリックは覚えておき、次の箱が来たらすぐ返す
     const g = this.geo(), s = g.s, cnt = Math.round(9 + 7 * k);
-    this.state = 'flip'; this.k = 0;
+    this.state = 'flip'; this.k = 0; this.boxes++;
     for (let i = 0; i < cnt; i++) {
       const lost = Math.random() < TOY_LOST; // ときどき画面の外へ飛んでいって行方不明になる
       this.items.push({ lost,
@@ -1346,7 +1366,11 @@ const hose = {
   },
   started() { return this.open > 0.03; },
   result() { return Math.floor(this.L) + 'L'; },
-  commit(tot) { add(tot, 'hose', this.L); add(tot, 'wet', this.cloth.filter(c => c.wet >= 0.35).length); },
+  commit(tot) {
+    const w = this.cloth.filter(c => c.wet >= 0.35).length;
+    add(tot, 'hose', this.L); add(tot, 'wet', w); mx(tot, 'wetMax', w);
+    if (this.open >= 1) tot.hoseFull = 1;
+  },
   geo() { const s = SC(); return { s, hx: W / 2, hy: H * 0.8, hr: 58 * s, ground: H * 0.6, lineY: H * 0.19, x0: W * 0.07, x1: W * 0.93 }; },
   clothRect(c, g) {
     const s = g.s, w = (c.k === 'sock' ? 26 : c.k === 'towel' ? 54 : 50) * s, h = (c.k === 'sock' ? 44 : c.k === 'towel' ? 70 : 56) * s;
@@ -1492,7 +1516,7 @@ const elev = {
   init() { this.n = 0; this.lit = new Array(EC * ER).fill(0); this.old = null; this.slide = 0; this.wait = 0; this.t = 0; this.ptr = {}; this.cars = 1; this.banner = 0; this.broken = false; this.breakT = 0; },
   started() { return this.n > 0; },
   result() { return this.n + '階分'; },
-  commit(tot) { add(tot, 'elev', this.n); add(tot, 'broke', this.broken ? 1 : 0); },
+  commit(tot) { add(tot, 'elev', this.n); add(tot, 'broke', this.broken ? 1 : 0); mx(tot, 'elevMax', this.n); },
   geo() {
     const s = SC(), pw = Math.min(W * 0.72, 270 * s), ph = Math.min(H * 0.78, pw * 2.4);
     const x = (W - pw) / 2, y = H * 0.13 + (H * 0.83 - ph) / 2, top = y + ph * 0.15, cw = pw / EC, ch = ph * 0.72 / ER;
@@ -1590,7 +1614,7 @@ const nopush = {
   init() { this.n = 0; this.press = 0; this.flash = 0; this.shake = 0; this.t = 0; this.msg = ''; this.mt = 0; },
   started() { return this.n > 0; },
   result() { return this.n + '回'; },
-  commit(tot) { add(tot, 'nopush', this.n); },
+  commit(tot) { add(tot, 'nopush', this.n); mx(tot, 'nopushMax', this.n); },
   down() {
     this.n++; this.press = 1; this.flash = 1; this.shake = Math.min(1, 0.3 + this.n * 0.02); sfx.buzz(this.n);
     const m = NOPUSH_MSG.find(x => x[0] === this.n); if (m) { this.msg = m[1]; this.mt = 1.8; }
@@ -1653,13 +1677,14 @@ const BONUS_RATE = 0.05;   // 無限モードで、1周目のあと各ステー�
 const PLAY = [6, 5, 4], PROMPT = [1.0, 0.8, 0.65], FLASH = [1.0, 0.85, 0.7], RATE = [1, 1.1, 1.2]; // 周回ごと。4周目以降は最後の値
 const SITE = 'https://sakuichi.github.io/itazu-rush/';
 const add = (t, k, v) => { t[k] = (t[k] || 0) + v; };
+const mx = (t, k, v) => { t[k] = Math.max(t[k] || 0, v); }; // 1回のステージでの最高（図鑑の判定用）
 let mode = 'title', gameMode = 'loop', st = null, tm = 0, paused = false, clock = 0, committed = true;
 let count = 0, order = [], isBonus = false, lastBonus = false, bonusDone = false, played = new Set(), forced = [];
 let tot = {}, res = null, rt = 0, barH = 0;
 // 結果のボタン帯がキャンバスの下から何pxを占めるか（結果カードはその上に収める）
 function measureBar() { barH = Math.max(0, cv.getBoundingClientRect().bottom - $('resbar').getBoundingClientRect().top); }
 const hud = $('hud');
-const panels = { title: $('title'), pause: $('pause'), result: $('result'), shop: $('shop') };
+const panels = { title: $('title'), pause: $('pause'), result: $('result'), shop: $('shop'), zukan: $('zukan') };
 
 const speed = () => Math.min(PLAY.length - 1, Math.floor(Math.max(0, count - 1) / N));
 // 成果を数えてよいのはプレイ中だけ（時間切れのあとの慣性や流れっぱなしの分は数えない）
@@ -1694,7 +1719,7 @@ function startGame(m) {
   initAudio();
   if (m) gameMode = m;
   tot = {}; played = new Set(); count = 0; order = []; lastBonus = false; bonusDone = false; paused = false; res = null;
-  panels.title.hidden = true; panels.result.hidden = true; panels.pause.hidden = true; panels.shop.hidden = true; hud.hidden = false;
+  panels.title.hidden = true; panels.result.hidden = true; panels.pause.hidden = true; panels.shop.hidden = true; panels.zukan.hidden = true; hud.hidden = false;
   $('recHint').textContent = ''; $('saveVid').hidden = true;
   recCancel(); // 前回の録画がまだ止まっていなければ捨てる
   recStart();
@@ -1702,7 +1727,7 @@ function startGame(m) {
 }
 function next() {
   const s = pickNext();
-  if (!s) { finish(); return; }
+  if (!s) { finish(true); return; }
   st = s; isBonus = s === BONUS; st.init(); played.add(st.key); committed = false;
   mode = 'prompt'; tm = 0;
   if (isBonus) sfx.rare(); else sfx.prompt();
@@ -1734,11 +1759,67 @@ function buildResult() {
   const tb = 0.3 + rows.length * 0.09 + 0.2;
   return { rows, sec, yen, angry, word: verdict(angry), tb, ts: tb + 0.85, shown: 0, stamped: false };
 }
-function finish() {
+/* ---------- いたずら図鑑（実績。端末に保存する） ---------- */
+// ok(tot, g) が true になったら登録。g = { natural: 最後まで遊んだ, loop: 周回モード, count: 遊んだ本数, played, res }
+// secret: 達成するまで条件も伏せる
+const ZUKAN = [
+  { id: 'tissue', name: 'ティッシュ全部出す係', desc: 'ティッシュを1回で40枚出す', ok: t => (t.tissueMax || 0) >= 40 },
+  { id: 'roll', name: 'ロール使い切り', desc: 'トイレットペーパーを1回で30m伸ばす', ok: t => (t.tpMax || 0) >= 30 },
+  { id: 'shoji2', name: '障子やぶりの達人', desc: '障子を1回で2面、張り替えにする', ok: t => (t.shojiFullMax || 0) >= 2 },
+  { id: 'shoji1', name: 'ひと穴だけ', desc: '障子を1穴だけ破って終える', ok: t => !!t.shojiOne },
+  { id: 'paste', name: 'しぼり切り', desc: '歯みがき粉を1回で1本しぼり切る', ok: t => (t.pasteMax || 0) >= TUBE_CM },
+  { id: 'shampoo', name: 'あわあわ', desc: 'シャンプーを1回で50プッシュ', ok: t => (t.shampooMax || 0) >= 50 },
+  { id: 'rug', name: 'クリーニング行き', desc: 'じゅうたんを泥んこにする', ok: t => (t.rug || 0) >= 1 },
+  { id: 'lost', name: '行方不明', desc: 'おもちゃを失くす', ok: t => (t.lost || 0) >= 1 },
+  { id: 'boxes', name: 'ひっくり返し屋', desc: 'おもちゃ箱を1回で5箱ひっくり返す', ok: t => (t.boxMax || 0) >= 5 },
+  { id: 'clothes', name: '服がもうダメ', desc: 'タメ最大で水たまりに飛び込む', ok: t => (t.clothes || 0) >= 1 },
+  { id: 'hose', name: '全開', desc: 'ホースを全開にする', ok: t => !!t.hoseFull },
+  { id: 'laundry', name: '洗濯やり直し', desc: '洗濯物を1回で全部びしょぬれにする', ok: t => (t.wetMax || 0) >= 6 },
+  { id: 'elev', name: '各駅停車', desc: 'エレベーターのボタンを全部押す', ok: t => (t.elevMax || 0) >= EC * ER },
+  { id: 'broke', name: '故障', desc: 'エレベーターを故障させる', secret: 'エレベーターで、ごくまれに起きる何か', ok: t => (t.broke || 0) >= 1 },
+  { id: 'nopush', name: '押しちゃった', desc: '押すなボタンを押す', ok: t => (t.nopush || 0) >= 1 },
+  { id: 'nopush55', name: '伝説の連打', desc: '押すなボタンを1回で55回押す', ok: t => (t.nopushMax || 0) >= 55 },
+  { id: 'clear', name: 'やり切った', desc: '周回モードを最後まで遊ぶ', ok: (t, g) => g.loop && g.natural },
+  { id: 'goodkid', name: 'いい子', desc: '周回モードを怒られ度0%で終える', secret: '周回モードを、ある判定で終える', ok: (t, g) => g.loop && g.natural && g.res.angry === 0 },
+  { id: 'legend', name: '伝説のいたずらっ子', desc: '判定「伝説のいたずらっ子」をもらう', ok: (t, g) => tierOf(g.res.angry) === 5 },
+  { id: 'yen', name: '損害1万円', desc: '1回の損害額が1万円を超える', ok: (t, g) => g.res.yen >= 10000 },
+  { id: 'endless', name: 'やめられない', desc: '無限モードで30本続ける', ok: (t, g) => !g.loop && g.count >= 30 },
+  { id: 'rare', name: 'レア出現', desc: '無限モードで押すなボタンに出会う', secret: '無限モードで、まれに出会える何か', ok: (t, g) => !g.loop && g.played.has('nopush') },
+  { id: 'vs', name: '挑戦状に勝つ', desc: '挑戦状の怒られ度を超える', ok: (t, g) => g.loop && g.natural && challenge != null && g.res.angry > challenge },
+  { id: 'movie', name: '記念撮影', desc: '録画した動画を保存する', ok: () => false } // 動画の保存ボタンで登録
+];
+let zukan = {};
+try { zukan = JSON.parse(localStorage.getItem('itazurush-zukan') || '{}') || {}; } catch (e) { zukan = {}; }
+function unlock(ids) { // 新しく登録された項目の名前を返す
+  const d = new Date(), day = d.getFullYear() + '/' + (d.getMonth() + 1) + '/' + d.getDate(), got = [];
+  for (const id of ids) if (!zukan[id]) { zukan[id] = day; got.push(ZUKAN.find(z => z.id === id).name); }
+  if (got.length) { try { localStorage.setItem('itazurush-zukan', JSON.stringify(zukan)); } catch (e) {} renderZukan(); }
+  return got;
+}
+function checkZukan(natural) {
+  const g = { natural, loop: gameMode === 'loop', count, played, res };
+  return unlock(ZUKAN.filter(z => { try { return z.ok(tot, g); } catch (e) { return false; } }).map(z => z.id));
+}
+function renderZukan() {
+  const n = ZUKAN.filter(z => zukan[z.id]).length;
+  $('zukanCount').textContent = n + '/' + ZUKAN.length;
+  $('zukanSum').textContent = n + ' / ' + ZUKAN.length + ' 個 登録ずみ';
+  const ul = $('zukanList'); ul.textContent = '';
+  for (const z of ZUKAN) {
+    const li = document.createElement('li'), b = document.createElement('b'), sp = document.createElement('span'), got = zukan[z.id];
+    li.className = got ? 'got' : '';
+    b.textContent = got ? z.name : '？？？';
+    sp.textContent = got ? z.desc + '（' + got + '）' : (z.secret || z.desc);
+    li.append(b, sp); ul.appendChild(li);
+  }
+}
+
+function finish(natural) { // natural: 最後まで遊んで終わった（中断からやめたのではない）
   commit(); music.stop();
   mode = 'result'; paused = false; recPause(false);
   hud.hidden = true; panels.pause.hidden = true;
   res = buildResult(); rt = calm ? 9 : 0;
+  res.newZ = checkZukan(natural === true);
   panels.result.hidden = false; measureBar();
   $('recHint').textContent = rec ? '動画を書き出し中です…' : (recOn && canRec ? '録画を開始できませんでした。' + (recErr ? '（' + recErr + '）' : '') : '');
   fillShop();
@@ -1748,7 +1829,7 @@ function finish() {
 function goTitle() {
   music.stop(); recCancel();
   mode = 'title'; paused = false; st = null; committed = true; res = null;
-  hud.hidden = true; panels.pause.hidden = true; panels.result.hidden = true; panels.shop.hidden = true; panels.title.hidden = false;
+  hud.hidden = true; panels.pause.hidden = true; panels.result.hidden = true; panels.shop.hidden = true; panels.zukan.hidden = true; panels.title.hidden = false;
 }
 function setPause(v) {
   if (mode !== 'prompt' && mode !== 'play' && mode !== 'flash') return;
@@ -1781,7 +1862,8 @@ function updateResult(dt) {
   const shown = Math.min(res.rows.length, Math.floor((rt - 0.3) / 0.09) + 1);
   if (shown > res.shown && !calm) { res.shown = shown; sfx.row(); }
   if (!res.stamped && rt >= res.ts) { res.stamped = true; sfx.stamp(); }
-  if (rec && rt >= res.ts + 1.5) recStop(); // 判定のハンコを押してから少しで録画を止める
+  if (res.newZ.length && !res.zShown && rt >= res.ts + 0.6) { res.zShown = true; sfx.rare(); }
+  if (rec && rt >= res.ts + (res.newZ.length ? 2.4 : 1.5)) recStop(); // 判定のハンコ（と図鑑のシール）のあと少しで録画を止める
 }
 
 /* ---------- 描画（HUDと結果もキャンバスに描く。録画に写すため） ---------- */
@@ -1928,6 +2010,18 @@ function drawResult() {
   ctx.fillText('実際にやると本当に怒られます。', cw / 2, y + 25);
   y += 34;
   ctx.font = `700 12px ${BODY}`; ctx.fillStyle = INK; ctx.fillText(SITE.replace('https://', '').replace(/\/$/, ''), cw / 2, y + 10);
+  // 図鑑に新しく登録されたものは、カードの下のほうにシールで貼る
+  if (res.newZ.length && rt >= res.ts + 0.6) {
+    const e = calm ? 1 : clamp((rt - res.ts - 0.6) / 0.15, 0, 1), sw = cw - 36, sh = 58;
+    ctx.save(); ctx.globalAlpha = e; ctx.translate(cw / 2, need - 46); ctx.rotate(0.035); ctx.scale(1.6 - 0.6 * e, 1.6 - 0.6 * e);
+    rr(-sw / 2 + 5, -sh / 2 + 5, sw, sh, 8); ctx.fillStyle = INK; ctx.fill();
+    rr(-sw / 2, -sh / 2, sw, sh, 8); ctx.fillStyle = POP; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = INK; ctx.stroke();
+    ctx.fillStyle = INK; ctx.textBaseline = 'middle';
+    fitText('図鑑に登録！', 0, -12, sw - 24, `18px ${DISPLAY}`, 'center');
+    const names = res.newZ.length > 3 ? res.newZ.slice(0, 3).join('・') + ' ほか' + (res.newZ.length - 3) + '個' : res.newZ.join('・');
+    fitText('「' + names + '」', 0, 13, sw - 24, `900 13px ${BODY}`, 'center');
+    ctx.restore();
+  }
   ctx.restore();
 }
 let last = 0;
@@ -2041,10 +2135,12 @@ $('endlessBtn').addEventListener('click', () => startGame('endless'));
 $('againBtn').addEventListener('click', () => startGame());
 $('pauseBtn').addEventListener('click', () => setPause(true));
 $('resumeBtn').addEventListener('click', () => { initAudio(); setPause(false); });
-$('quitBtn').addEventListener('click', finish);
+$('quitBtn').addEventListener('click', () => finish(false));
 $('homeBtn').addEventListener('click', goTitle);
 $('home2Btn').addEventListener('click', goTitle);
 $('shopBtn').addEventListener('click', () => { panels.shop.hidden = false; });
+$('zukanBtn').addEventListener('click', () => { panels.zukan.hidden = false; });
+$('zukanClose').addEventListener('click', () => { panels.zukan.hidden = true; });
 $('shopClose').addEventListener('click', () => { panels.shop.hidden = true; });
 $('xpost').addEventListener('click', () => {
   if (!res) return;
@@ -2054,6 +2150,7 @@ $('saveVid').addEventListener('click', () => {
   if (!recBlob || !res) return;
   saveBlob(recBlob, 'itazu-rush-' + res.yen + 'yen.' + (recBlob.type.indexOf('mp4') >= 0 ? 'mp4' : 'webm'), shareText());
   $('recHint').textContent = '動画を書き出しました。';
+  if (unlock(['movie']).length) $('recHint').textContent = '動画を書き出しました。図鑑に「記念撮影」を登録しました。';
 });
 function setSound(v) {
   soundOn = v; $('soundChk').checked = v; $('soundChk2').checked = v;
@@ -2070,6 +2167,7 @@ setSound(soundOn);
 if (canRec) { $('recOpt').hidden = false; $('recNote').hidden = false; $('recChk').checked = recOn; }
 $('chips').innerHTML = NORMAL.map(s => '<li>' + s.name + '</li>').join('') + (BONUS ? '<li class="secret">？？？</li>' : '');
 $('startSub').textContent = '全' + N + '種を' + ROUNDS + '周';
+renderZukan();
 if (challenge != null) {
   $('challenge').textContent = '挑戦状が届いています。「はじめる」で、怒られ度 ' + challenge + '%（判定：' + verdict(challenge) + '）を超えてください。';
   $('challenge').hidden = false;
