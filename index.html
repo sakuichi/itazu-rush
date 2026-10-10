@@ -75,6 +75,10 @@ button.mini:active{transform:translate(2px,2px)}
 .zlist li.got{border-color:var(--ink);background:#fff6cf;color:var(--ink)}
 .zlist b{font-size:13px;font-weight:900}
 .zlist span{font-size:11px;line-height:1.5}
+.pick{display:flex;align-items:center;gap:8px;padding:7px 10px;border:2px dashed var(--ink);border-radius:6px;background:#fff;color:var(--ink);text-decoration:none;font-size:13px;font-weight:700;line-height:1.4}
+.pick .pr{font-size:10px;font-weight:900;background:var(--ink);color:var(--pop);padding:1px 5px;border-radius:3px}
+.pick .pt{flex:1;min-width:0}
+.pick small{color:var(--mute);font-size:11px;white-space:nowrap}
 .shoplist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
 .shoplist a{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 12px;border:3px solid var(--ink);border-radius:6px;background:#fff;color:var(--ink);text-decoration:none;font-weight:700;font-size:14px}
 .shoplist small{color:var(--mute);font-size:12px;white-space:nowrap}
@@ -107,6 +111,7 @@ button.mini:active{transform:translate(2px,2px)}
       <p class="small" id="recNote" hidden>録画すると、プレイから結果までを音つきの動画で保存できます（音を出さない設定でも、動画には音が入ります）。</p>
       <p class="small">周回ごとに速くなります。失敗はありません。右上の一時停止ボタンでいつでも中断できます。</p>
       <p class="small">※いたずらをすすめるものではありません。画面の中だけで楽しんでください。</p>
+      <p class="small">Amazonのアソシエイトとして、当サイトは適格販売により収入を得ています。</p>
     </div>
   </section>
 
@@ -125,6 +130,7 @@ button.mini:active{transform:translate(2px,2px)}
   <section class="panel bottom" id="result" hidden>
     <div class="resbar" id="resbar">
       <button class="big" id="againBtn" type="button">もう一回いたずらする</button>
+      <a class="pick" id="pick" href="#" target="_blank" rel="sponsored noopener" hidden><span class="pr">PR</span><span class="pt" id="pickText"></span><small>Amazon →</small></a>
       <div class="minirow">
         <button class="mini" id="saveVid" type="button" hidden>動画を保存</button>
         <button class="mini" id="xpost" type="button">Xでポスト</button>
@@ -478,10 +484,10 @@ const toilet = {
   ], ['k.h.s.h.k.k.s.h.k.h.s.h.k.h.s.ss']),
   shop: [['トイレットペーパー', 'トイレットペーパー まとめ買い']],
   bill(t) { const m = (t.tp || 0) / PXM; return { v: m.toFixed(1) + 'm', n: 'ロール ' + (m / ROLL_M).toFixed(1) + '個分・巻き直す', sec: m * 5, yen: m * 60 / ROLL_M }; },
-  init() { this.len = 0; this.vel = 0; this.pend = 0; this.ptr = {}; this.tick = 0; this.rolls = 0; this.refill = 0; },
+  init() { this.len = 0; this.vel = 0; this.pend = 0; this.ptr = {}; this.tick = 0; this.rolls = 0; this.refill = 0; this.hapAt = hapTime(); this.pt = 0; this.hapK = -1; },
   started() { return this.len > 30; },
   result() { return (this.len / PXM).toFixed(1) + 'm'; },
-  commit(tot) { add(tot, 'tp', this.len); mx(tot, 'tpMax', this.len / PXM); },
+  commit(tot) { add(tot, 'tp', this.len); mx(tot, 'tpMax', this.len / PXM); if (this.hapK >= 0) tot.hapRoll = 1; },
   down(id, x, y) { this.ptr[id] = y; },
   move(id, x, y) {
     if (!(id in this.ptr)) return;
@@ -498,7 +504,12 @@ const toilet = {
   },
   update(dt) {
     this.refill = Math.max(0, this.refill - dt);
+    if (this.hapK >= 0) this.hapK += dt;
     if (!scoring()) { this.vel = 0; this.pend = 0; return; } // 時間切れのあとは転がらない（数えない）
+    // ハプニング：ロールが外れて廊下の奥まで転がっていく（1.2秒で20m）
+    this.pt += dt;
+    if (this.hapAt >= 0 && this.hapK < 0 && this.pt >= this.hapAt) { this.hapK = 0; sfx.hap(); }
+    if (this.hapK >= 0 && this.hapK < 1.2) this.add(PXM * 20 * dt / 1.2);
     if (this.pend > 0) {
       this.vel = Math.min(7000, Math.max(this.vel, this.pend / Math.max(dt, 0.008) * 0.9));
       this.add(this.pend); this.pend = 0;
@@ -565,6 +576,16 @@ const toilet = {
     // カバー
     rr(cx - rw / 2 - 30, cy - rw * 0.44 - 26, rw + 60, 22, 8); ctx.fillStyle = '#dfe5ea'; ctx.fill(); ctx.strokeStyle = INK; ctx.lineWidth = 4; ctx.stroke();
     if (this.refill > 0) bigText('おかわり！', cx, cy + rw * 0.44 + 60, 30, POP, INK, W * 0.8);
+    if (this.hapK >= 0 && this.hapK < 1.6) { // 床を転がっていくロールと、のびていく紙
+      const p = Math.min(1, this.hapK / 1.2), rx = cx + p * (W * 0.75), ry = H - 40, rr2 = 30;
+      ctx.fillStyle = '#ffffff'; ctx.fillRect(cx, H - 24, rx - cx, 14); ctx.strokeStyle = 'rgba(35,27,46,.28)'; ctx.lineWidth = 2; ctx.strokeRect(cx, H - 24, rx - cx, 14);
+      ctx.save(); ctx.translate(rx, ry); ctx.rotate(p * 18);
+      ctx.beginPath(); ctx.arc(0, 0, rr2, 0, Math.PI * 2); ctx.fillStyle = PAPER; ctx.fill(); ctx.lineWidth = 4; ctx.strokeStyle = INK; ctx.stroke();
+      ctx.beginPath(); ctx.arc(0, 0, rr2 * 0.35, 0, Math.PI * 2); ctx.fillStyle = '#c9a77a'; ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(rr2 * 0.4, 0); ctx.lineTo(rr2 * 0.95, 0); ctx.lineWidth = 2; ctx.stroke();
+      ctx.restore();
+      hapBanner('ロールが転がっていった！', this.hapK);
+    }
   },
   drawHint(t) {
     const p = (t * 1.4) % 1;
@@ -587,7 +608,7 @@ const shoji = {
     const n = [full ? '張り替え ' + full + '面' : '', patch ? '補修シール ' + patch + '穴' : ''].filter(Boolean).join('・') || '無傷';
     return { v: (t.holes || 0) + '穴', n, sec: full * 1200 + patch * 60, yen: full * 1000 + patch * 50 };
   },
-  init() { this.n = 0; this.faces = 0; this.faceHoles = []; this.dirty = false; this.panes = new Array(COLS * ROWS).fill(null); this.old = null; this.slide = 0; this.wait = 0; this.bits = []; this.ptr = {}; },
+  init() { this.n = 0; this.faces = 0; this.faceHoles = []; this.dirty = false; this.panes = new Array(COLS * ROWS).fill(null); this.old = null; this.slide = 0; this.wait = 0; this.bits = []; this.ptr = {}; this.hapAt = hapTime(); this.pt = 0; this.hapK = -1; this.cat = null; this.catT = 0; this.catN = 0; },
   started() { return this.n > 0; },
   result() { return this.n + '穴'; },
   commit(tot) {
@@ -596,7 +617,9 @@ const shoji = {
     tot.shojiF = (tot.shojiF || []).concat(this.faceHoles, cur ? [cur] : []); // 面ごとの穴の数
     mx(tot, 'shojiFullMax', this.faceHoles.filter(h => h > SHOJI_PATCH).length + (cur > SHOJI_PATCH ? 1 : 0));
     if (this.n === 1) tot.shojiOne = 1;
+    if (this.hapK >= 0) tot.hapCat = 1;
   },
+  hitPane(i) { const g = this.geo(); this.hit(g.ix + (i % COLS + 0.5) * g.cw, g.iy + (Math.floor(i / COLS) + 0.5) * g.ch); },
   geo() {
     const w = Math.min(W * 0.86, 420), h = Math.min(H * 0.72, w * 1.6);
     const x = (W - w) / 2, y = H * 0.15 + (H * 0.72 - h) / 2;
@@ -625,6 +648,23 @@ const shoji = {
   move(id, x, y) { if (this.ptr[id]) this.hit(x, y); }, // 押している指だけ（PCでマウスを動かしただけでは破れない）
   up(id) { if (id == null) this.ptr = {}; else delete this.ptr[id]; },
   update(dt) {
+    // ハプニング：障子の向こうからネコが顔を出し、いっしょに破り始める
+    if (this.hapK >= 0) this.hapK += dt;
+    if (scoring()) {
+      this.pt += dt;
+      if (this.hapAt >= 0 && this.hapK < 0 && this.pt >= this.hapAt && this.slide === 0 && this.wait === 0) {
+        const free = this.panes.map((p, i) => p ? -1 : i).filter(i => i >= 0);
+        if (free.length) { const i = free[Math.floor(Math.random() * free.length)]; this.hapK = 0; this.cat = { i, panes: this.panes }; this.hitPane(i); sfx.meow(); sfx.hap(); }
+      }
+      if (this.cat && this.hapK < 2.2 && this.catN < 6 && this.cat.panes === this.panes) {
+        this.catT -= dt;
+        if (this.catT <= 0) {
+          this.catT = 0.3;
+          const free = this.panes.map((p, i) => p ? -1 : i).filter(i => i >= 0);
+          if (free.length) { this.hitPane(free[Math.floor(Math.random() * free.length)]); this.catN++; }
+        }
+      }
+    }
     if (this.wait > 0) { this.wait -= dt; if (this.wait <= 0) { this.wait = 0; this.old = this.panes; this.faceHoles.push(COLS * ROWS); this.panes = new Array(COLS * ROWS).fill(null); this.dirty = false; this.slide = 1; sfx.slide(); } }
     if (this.slide > 0) { this.slide = Math.max(0, this.slide - dt / 0.26); if (this.slide === 0) this.old = null; }
     for (let i = this.bits.length - 1; i >= 0; i--) {
@@ -638,6 +678,20 @@ const shoji = {
     // 向こう側（夜）
     ctx.fillStyle = '#2a2238'; ctx.fillRect(g.ix, g.iy, g.iw, g.ih);
     ctx.fillStyle = POP; ctx.beginPath(); ctx.arc(g.ix + g.iw * 0.7, g.iy + g.ih * 0.2, m * 0.42, 0, Math.PI * 2); ctx.fill();
+    // ネコ（向こう側にいて、紙の穴からだけ見える）
+    if (this.cat && panes === this.cat.panes && panes[this.cat.i]) {
+      const i = this.cat.i, p = panes[i], hx = g.ix + (i % COLS + p.fx) * g.cw, hy = g.iy + (Math.floor(i / COLS) + p.fy) * g.ch, R = p.rad * m * 1.05;
+      ctx.fillStyle = '#f2a65a';
+      ctx.beginPath(); ctx.moveTo(hx - R * 0.9, hy - R * 0.3); ctx.lineTo(hx - R * 0.6, hy - R * 1.3); ctx.lineTo(hx - R * 0.1, hy - R * 0.7); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(hx + R * 0.9, hy - R * 0.3); ctx.lineTo(hx + R * 0.6, hy - R * 1.3); ctx.lineTo(hx + R * 0.1, hy - R * 0.7); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.arc(hx, hy, R, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = INK;
+      for (const sx of [-1, 1]) { ctx.beginPath(); ctx.ellipse(hx + sx * R * 0.38, hy - R * 0.1, R * 0.1, R * 0.17, 0, 0, Math.PI * 2); ctx.fill(); }
+      ctx.fillStyle = '#ff8fa3'; ctx.beginPath(); ctx.moveTo(hx - R * 0.1, hy + R * 0.15); ctx.lineTo(hx + R * 0.1, hy + R * 0.15); ctx.lineTo(hx, hy + R * 0.28); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = INK; ctx.lineWidth = 1.5; ctx.beginPath();
+      for (const sx of [-1, 1]) for (const dy of [0.2, 0.35]) { ctx.moveTo(hx + sx * R * 0.25, hy + R * dy); ctx.lineTo(hx + sx * R * 0.85, hy + R * (dy + (dy - 0.27))); }
+      ctx.stroke();
+    }
     // 紙
     for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
       const p = panes[r * COLS + c], px = g.ix + c * g.cw, py = g.iy + r * g.ch;
@@ -694,6 +748,7 @@ const shoji = {
       ctx.save(); ctx.globalAlpha = clamp(b.life * 2, 0, 1); ctx.translate(b.x, b.y); ctx.rotate(b.r);
       ctx.fillStyle = '#fbf5e4'; ctx.fillRect(-b.s / 2, -b.s / 2, b.s, b.s * 0.7); ctx.restore();
     }
+    hapBanner('ネコも参戦！', this.hapK);
   },
   drawHint(t) {
     const g = this.geo(), x = g.ix + g.cw * 1.5, y = g.iy + g.ch * 2.5, p = (t * 1.6) % 1;
@@ -722,8 +777,24 @@ Object.assign(sfx, {
   handle() { tone(rnd(1300, 1600), 900, 0.03, 0.05, 'square'); },
   full() { tone(523, 1047, 0.25, 0.1, 'square'); noise(0.5, 2000, 0.5, 0.2); },
   ding(f) { const h = 660 * Math.pow(2, (f % 12) / 12); tone(h, h, 0.3, 0.07, 'sine'); tone(h * 2, h * 2, 0.15, 0.025, 'sine'); },
-  buzz(n) { tone(110 + Math.min(n, 60) * 2, 100, 0.13, 0.13, 'sawtooth'); tone(55, 55, 0.13, 0.12, 'square'); }
+  buzz(n) { tone(110 + Math.min(n, 60) * 2, 100, 0.13, 0.13, 'sawtooth'); tone(55, 55, 0.13, 0.12, 'square'); },
+  hap() { [660, 880, 1320, 1760].forEach((f, i) => tone(f, f, 0.12, 0.08, 'square', i * 0.07)); },
+  meow() { tone(700, 1100, 0.12, 0.08, 'sine'); tone(1100, 600, 0.25, 0.08, 'sine', 0.12); },
+  woof() { tone(320, 180, 0.12, 0.2, 'sawtooth'); noise(0.1, 600, 1, 0.15, 'bandpass'); },
+  car() { noise(0.7, 300, 0.5, 0.35, 'lowpass'); tone(90, 140, 0.6, 0.15, 'sawtooth'); },
+  coin() { tone(988, 988, 0.08, 0.08, 'square'); tone(1319, 1319, 0.3, 0.08, 'square', 0.08); }
 });
+/* ハプニング：ステージ1回ごとに HAP_RATE の確率で、プレイ開始から1〜2.2秒のどこかで起きる（猫・へそくり・ロール・車・犬） */
+const HAP_RATE = 0.08;
+let forceHap = false; // 自動テスト用
+const hapTime = () => (forceHap || Math.random() < HAP_RATE) ? rnd(1.0, 2.2) : -1;
+function hapBanner(text, t) { // t: 起きてからの秒数
+  if (t < 0 || t > 1.6) return;
+  const e = calm ? 1 : Math.min(1, t / 0.15);
+  ctx.save(); ctx.globalAlpha = Math.min(1, (1.6 - t) * 4); ctx.translate(W / 2, H * 0.3); ctx.rotate(-0.06); ctx.scale(1.5 - 0.5 * e, 1.5 - 0.5 * e);
+  bigText(text, 0, 0, Math.min(44, W * 0.1), POP, INK, W * 0.88);
+  ctx.restore();
+}
 function tapHint(x, y, t, rate) {
   const p = (t * (rate || 1.6)) % 1;
   ctx.save(); ctx.globalAlpha = 1 - p; ctx.beginPath(); ctx.arc(x, y, 17 + p * 26, 0, Math.PI * 2); ctx.lineWidth = 4; ctx.strokeStyle = INK; ctx.stroke(); ctx.restore();
@@ -966,10 +1037,10 @@ const mud = {
   ], ['k.s.k.s.kks.k.s.k.s.k.s.kks.k.s.']),
   shop: [['ラグ用のクリーナー', 'カーペットクリーナー'], ['玄関マット', '玄関マット']],
   bill(t) { const n = t.mud || 0, c = t.rug || 0; return { v: n + '歩', n: c ? 'じゅうたんのクリーニング ' + c + '回・床ふき' : '床ふき', sec: n * 10, yen: c * 1500 }; },
-  init() { this.n = 0; this.onRug = 0; this.prints = []; this.ptr = {}; this.drops = []; this.t = 0; this.ruinT = 0; },
+  init() { this.n = 0; this.onRug = 0; this.prints = []; this.ptr = {}; this.drops = []; this.t = 0; this.ruinT = 0; this.hapAt = hapTime(); this.pt = 0; this.hapK = -1; this.dog = null; },
   started() { return this.n > 0; },
   result() { return this.n + '歩'; },
-  commit(tot) { add(tot, 'mud', this.n); add(tot, 'rug', this.onRug >= MUD_RUIN ? 1 : 0); },
+  commit(tot) { add(tot, 'mud', this.n); add(tot, 'rug', this.onRug >= MUD_RUIN ? 1 : 0); if (this.hapK >= 0) tot.hapDog = 1; },
   geo() { const s = SC(), top = H * 0.2; return { s, top, rx: W * 0.08, ry: top + (H - top) * 0.1, rw: W * 0.84, rh: (H - top) * 0.78 }; },
   down(id, x, y) { const p = this.ptr[id] = { x, y, acc: 0, side: this.n % 2 ? 1 : -1 }; this.place(x, y, -Math.PI / 2, p); },
   move(id, x, y) {
@@ -985,23 +1056,54 @@ const mud = {
     const g = this.geo(), s = g.s, off = p.side * 9 * s, fx = x - Math.sin(a) * off, fy = y + Math.cos(a) * off;
     if (fy < g.top + 14 * s) return; // 部屋の中（玄関より下）だけ
     this.prints.push({ x: fx, y: fy, a, side: p.side });
+    p.side = -p.side;
+    this.stepAt(fx, fy);
+    sfx.squelch();
+  },
+  stepAt(fx, fy) { // 1歩ぶん数える（じゅうたんの上ならクリーニングに近づく）
+    const g = this.geo(), s = g.s;
     if (this.prints.length > 600) this.prints.shift();
-    p.side = -p.side; this.n++;
+    this.n++;
     if (fx > g.rx && fx < g.rx + g.rw && fy > g.ry && fy < g.ry + g.rh) {
       this.onRug++;
       if (this.onRug === MUD_RUIN) { this.ruinT = 1.3; sfx.refill(); }
     }
     for (let k = 0; k < 2; k++) this.drops.push({ x: fx, y: fy, vx: rnd(-90, 90) * s, vy: rnd(-140, -40) * s, life: rnd(0.25, 0.5), r: rnd(1.5, 3.5) * s });
-    sfx.squelch();
   },
   update(dt) {
     this.t += dt; this.ruinT = Math.max(0, this.ruinT - dt);
-    const s = SC();
+    const s = SC(), g = this.geo();
+    // ハプニング：イヌもついてきて、部屋じゅうに肉球の足あとをつける
+    if (this.hapK >= 0) this.hapK += dt;
+    if (scoring()) {
+      this.pt += dt;
+      if (this.hapAt >= 0 && this.hapK < 0 && this.pt >= this.hapAt) { this.hapK = 0; this.dog = { x: W * 0.5, y: g.top + 8 * s, a: Math.PI / 2, acc: 0, side: 1 }; sfx.woof(); sfx.hap(); }
+      const d = this.dog;
+      if (d && this.hapK < 2.2) {
+        d.a += Math.sin(this.t * 5) * dt * 3;
+        const sp = 280 * s * dt;
+        d.x += Math.cos(d.a) * sp; d.y += Math.sin(d.a) * sp;
+        if (d.x < 24 * s || d.x > W - 24 * s) { d.a = Math.PI - d.a; d.x = clamp(d.x, 24 * s, W - 24 * s); }
+        if (d.y < g.top + 24 * s || d.y > H - 24 * s) { d.a = -d.a; d.y = clamp(d.y, g.top + 24 * s, H - 24 * s); }
+        d.acc += sp;
+        if (d.acc >= 16 * s) {
+          d.acc = 0; d.side = -d.side;
+          const fx = d.x - Math.sin(d.a) * d.side * 6 * s, fy = d.y + Math.cos(d.a) * d.side * 6 * s;
+          this.prints.push({ x: fx, y: fy, a: d.a, paw: true }); this.stepAt(fx, fy);
+          if (Math.random() < 0.3) sfx.squelch();
+        }
+      }
+    }
     for (let i = this.drops.length - 1; i >= 0; i--) { const p = this.drops[i]; p.vy += 500 * s * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt; if (p.life <= 0) this.drops.splice(i, 1); }
   },
-  foot(p, s) { // はだしの泥の足あと（進む向きが +x）
+  foot(p, s) { // はだしの泥の足あと（進む向きが +x）。イヌの分は肉球
     ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.a);
     ctx.fillStyle = 'rgba(96,62,32,.88)';
+    if (p.paw) {
+      ctx.beginPath(); ctx.ellipse(-1 * s, 0, 4 * s, 4.5 * s, 0, 0, Math.PI * 2); ctx.fill();
+      [[4, -4.5], [5.5, -1.5], [5.5, 1.5], [4, 4.5]].forEach(([x, y]) => { ctx.beginPath(); ctx.arc(x * s, y * s, 1.6 * s, 0, Math.PI * 2); ctx.fill(); });
+      ctx.restore(); return;
+    }
     ctx.beginPath(); ctx.ellipse(1 * s, 0, 10 * s, 6 * s, 0, 0, Math.PI * 2); ctx.fill();
     ctx.beginPath(); ctx.ellipse(-9 * s, 0, 6.5 * s, 5 * s, 0, 0, Math.PI * 2); ctx.fill();
     // 指。親指は内側
@@ -1048,6 +1150,17 @@ const mud = {
     if (this.onRug >= MUD_RUIN) { rr(g.rx, g.ry, g.rw, g.rh, 10 * s); ctx.fillStyle = 'rgba(96,62,32,.12)'; ctx.fill(); }
     // 足あと
     for (const p of this.prints) this.foot(p, s);
+    if (this.dog && this.hapK < 2.6) { // イヌ（上から見たところ）
+      const d = this.dog;
+      ctx.save(); ctx.globalAlpha = Math.min(1, (2.6 - this.hapK) * 3); ctx.translate(d.x, d.y); ctx.rotate(d.a);
+      ctx.fillStyle = '#e8c39e'; ctx.strokeStyle = INK; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.ellipse(-16 * s, 0, 20 * s, 12 * s, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-34 * s, 0); ctx.lineTo(-44 * s, Math.sin(this.t * 25) * 6 * s); ctx.stroke();
+      ctx.beginPath(); ctx.arc(6 * s, 0, 12 * s, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#8a5a32'; for (const sy of [-1, 1]) { ctx.beginPath(); ctx.ellipse(2 * s, sy * 11 * s, 7 * s, 4 * s, sy * 0.4, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }
+      ctx.fillStyle = INK; ctx.beginPath(); ctx.arc(17 * s, 0, 3 * s, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
     ctx.fillStyle = 'rgba(96,62,32,.9)';
     for (const p of this.drops) { ctx.globalAlpha = Math.min(1, p.life * 4); ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill(); }
     ctx.globalAlpha = 1;
@@ -1057,6 +1170,7 @@ const mud = {
       bigText('クリーニング行き！', 0, 0, 40 * s, HOT, INK, W * 0.88);
       ctx.restore();
     }
+    hapBanner('イヌもついてきた！', this.hapK);
   },
   drawHint(t) {
     const p = (t * 0.8) % 1;
@@ -1074,11 +1188,14 @@ const toys = {
     ['triangle', 0.15, '48 . 64 . 43 . 64 . 48 . 64 . 43 . 64 . 43 . 65 . 50 . 65 . 43 . 65 . 48 . 64 .']
   ], ['k.s.k.s.k.s.k.s.k.s.k.s.k.s.kss.']),
   shop: [['おもちゃ収納ボックス', 'おもちゃ 収納 ボックス']],
-  bill(t) { const n = t.toys || 0, l = t.lost || 0; return { v: n + '個', n: (l ? '失くしたおもちゃ ' + l + '個・' : '') + '拾って箱にもどす', sec: n * 3, yen: l * 500 }; },
-  init() { this.n = 0; this.boxes = 0; this.lostN = 0; this.lostT = 0; this.queued = 0; this.items = []; this.ptr = {}; this.state = 'ready'; this.k = 0; this.t = 0; this.clat = 0; },
+  bill(t) {
+    const n = t.toys || 0, l = t.lost || 0, m = t.money || 0;
+    return { v: n + '個', n: (m ? 'へそくり発見（-' + (m * 5000).toLocaleString('ja-JP') + '円）・' : '') + (l ? '失くしたおもちゃ ' + l + '個・' : '') + '拾って箱にもどす', sec: n * 3, yen: l * 500 - m * 5000 };
+  },
+  init() { this.hapAt = hapTime(); this.pt = 0; this.hapK = -1; this.money = 0; this.n = 0; this.boxes = 0; this.lostN = 0; this.lostT = 0; this.queued = 0; this.items = []; this.ptr = {}; this.state = 'ready'; this.k = 0; this.t = 0; this.clat = 0; },
   started() { return this.n > 0; },
   result() { return this.n + '個'; },
-  commit(tot) { add(tot, 'toys', this.n); add(tot, 'lost', this.lostN); mx(tot, 'boxMax', this.boxes); },
+  commit(tot) { add(tot, 'toys', this.n); add(tot, 'lost', this.lostN); mx(tot, 'boxMax', this.boxes); add(tot, 'money', this.money); },
   geo() { const s = SC(), bw = Math.min(W * 0.62, 250 * s), bh = bw * 0.62, floor = H * 0.7; return { s, cx: W / 2, bw, bh, floor, by: floor - bh }; },
   down(id, x, y) { this.ptr[id] = { x, y, t: clock }; },
   move(id, x, y) {
@@ -1105,10 +1222,17 @@ const toys = {
     if (this.items.length > 240) this.items.splice(0, this.items.length - 240);
     sfx.flip();
   },
+  popMoney() { // ハプニング：箱の底からへそくりが飛び出す（着地したら損害額から引く）
+    const g = this.geo(), s = g.s;
+    this.items.push({ type: 5, c: '#d9e8c3', x: g.cx, y: g.by + g.bh * 0.3, vx: rnd(-200, 200) * s, vy: -rnd(900, 1100) * s, r: 0, vr: rnd(-4, 4), sz: 30 * s, land: rnd(g.floor + 16 * s, H - 30 * s), b: 0, rest: false });
+    sfx.flip();
+  },
   update(dt) {
     this.t += dt; this.clat = Math.max(0, this.clat - dt);
     const s = SC();
     this.lostT = Math.max(0, this.lostT - dt);
+    if (this.hapK >= 0) this.hapK += dt;
+    if (scoring()) { this.pt += dt; if (this.hapAt >= 0 && this.pt >= this.hapAt) { this.hapAt = -1; this.popMoney(); } }
     if (this.state === 'flip') { this.k += dt / 0.25; if (this.k >= 1) { this.k = 0; this.state = 'swap'; } }
     else if (this.state === 'swap') { this.k += dt / 0.2; if (this.k >= 1) { this.k = 0; this.state = 'ready'; if (this.queued) { const q = this.queued; this.queued = 0; this.fling(q); } } }
     for (let i = this.items.length - 1; i >= 0; i--) {
@@ -1121,7 +1245,10 @@ const toys = {
       if (it.vy > 0 && it.y >= it.land) {
         it.y = it.land;
         if (it.b < 2 && it.vy > 200 * s) { it.vy *= -0.35; it.vx *= 0.6; it.vr *= 0.5; it.b++; if (this.clat <= 0) { this.clat = 0.05; sfx.clatter(); } }
-        else { it.rest = true; it.vx = it.vy = 0; }
+        else {
+          it.rest = true; it.vx = it.vy = 0;
+          if (it.type === 5 && scoring()) { this.money++; this.hapK = 0; sfx.coin(); sfx.hap(); }
+        }
       }
     }
   },
@@ -1151,6 +1278,11 @@ const toys = {
         ctx.beginPath(); ctx.arc(z * 0.3, -z * 0.3, z * 0.26, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
         ctx.fillStyle = '#ff9e3d'; ctx.beginPath(); ctx.moveTo(z * 0.52, -z * 0.34); ctx.lineTo(z * 0.8, -z * 0.26); ctx.lineTo(z * 0.52, -z * 0.18); ctx.closePath(); ctx.fill(); ctx.stroke();
         ctx.fillStyle = INK; ctx.beginPath(); ctx.arc(z * 0.34, -z * 0.36, z * 0.05, 0, Math.PI * 2); ctx.fill();
+        break;
+      case 5: // へそくり（お札）
+        rr(-z * 0.85, -z * 0.45, z * 1.7, z * 0.9, 3); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.ellipse(z * 0.35, 0, z * 0.25, z * 0.3, 0, 0, Math.PI * 2); ctx.strokeStyle = '#3d6b35'; ctx.lineWidth = 1.5; ctx.stroke();
+        ctx.fillStyle = '#3d6b35'; ctx.font = `${Math.round(z * 0.34)}px ${DISPLAY}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('5000', -z * 0.25, z * 0.03);
         break;
       default: // 星
         ctx.beginPath();
@@ -1191,6 +1323,7 @@ const toys = {
     for (const it of rest) this.toy(it);
     for (const it of this.items) if (!it.rest) this.toy(it);
     if (this.lostT > 0) bigText(this.lostN + '個 行方不明！', W / 2, H * 0.3, 34 * s, HOT, INK, W * 0.8);
+    hapBanner('へそくり発見！', this.hapK);
   },
   drawHint(t) {
     const g = this.geo(), p = (t * 1.3) % 1;
@@ -1208,13 +1341,14 @@ const puddle = {
   shop: [['泥汚れ用の洗剤', '泥汚れ 洗剤'], ['子ども用レインコート', 'キッズ レインコート']],
   bill(t) { const n = t.puddle || 0, c = t.clothes || 0; return { v: n + 'か所', n: '泥はね' + (c ? '・買い替えた服 ' + c + '着' : '・服と長靴を洗う'), sec: n * 10, yen: c * 1000 }; },
   init() {
+    this.hapAt = hapTime(); this.pt = 0; this.hapK = -1; this.carHit = false;
     this.spots = 0; this.jumps = 0; this.ruined = false; this.ruinT = 0; this.queued = null; this.hold = null; this.charge = 0; this.state = 'ready'; this.k = 0; this.power = 0; this.t = 0; this.shake = 0; this.ct = 0;
     this.drops = []; this.mud = []; this.rings = [];
     this.shape = []; for (let i = 0; i < 14; i++) this.shape.push(0.82 + Math.random() * 0.3);
   },
   started() { return this.jumps > 0 || this.state === 'charge'; },
   result() { return this.spots + 'か所'; },
-  commit(tot) { add(tot, 'puddle', this.spots); add(tot, 'jumps', this.jumps); add(tot, 'clothes', this.ruined ? 1 : 0); },
+  commit(tot) { add(tot, 'puddle', this.spots); add(tot, 'jumps', this.jumps); add(tot, 'clothes', this.ruined ? 1 : 0); if (this.carHit) tot.hapCar = 1; },
   geo() { const s = SC(); return { s, cx: W / 2, cy: H * 0.5, R: Math.min(W * 0.42, H * 0.3) }; },
   down(id) {
     if (this.hold != null) return;
@@ -1233,6 +1367,17 @@ const puddle = {
   update(dt) {
     this.t += dt; this.shake = Math.max(0, this.shake - dt * 3);
     const g = this.geo(), s = g.s;
+    // ハプニング：通りかかった車に、逆に泥水をかけられる
+    if (this.hapK >= 0) this.hapK += dt;
+    if (scoring()) {
+      this.pt += dt;
+      if (this.hapAt >= 0 && this.hapK < 0 && this.pt >= this.hapAt) { this.hapK = 0; sfx.car(); }
+      if (this.hapK >= 0.4 && !this.carHit) {
+        this.carHit = true; this.shake = 1; sfx.splash(1); sfx.hap();
+        for (let i = 0; i < 14; i++) this.mud.push({ x: rnd(0, W), y: rnd(0, H * 0.7), r: rnd(14, 30) * s, seed: Math.random() * 99 });
+        this.spots += 14;
+      }
+    }
     if (this.state === 'charge') {
       this.charge = Math.min(1, this.charge + dt / 0.5);
       this.ct -= dt; if (this.ct <= 0 && this.charge < 1) { this.ct = 0.09; sfx.charge(this.charge); }
@@ -1332,6 +1477,15 @@ const puddle = {
       ctx.lineCap = 'butt';
       bigText(this.charge >= 1 ? 'MAX!' : 'タメ', g.cx, g.cy, 26 * s, PAPER, INK, r * 1.6);
     }
+    if (this.hapK >= 0 && this.hapK < 0.9) { // 通りすぎる車（上から見たところ）
+      const cx = -170 * s + (W + 340 * s) * this.hapK / 0.8, cy = H * 0.2;
+      ctx.save(); ctx.translate(cx, cy);
+      ctx.fillStyle = INK; for (const [wx, wy] of [[-45, -36], [45, -36], [-45, 36], [45, 36]]) { rr((wx - 14) * s, (wy - 7) * s, 28 * s, 14 * s, 4 * s); ctx.fill(); }
+      rr(-80 * s, -36 * s, 160 * s, 72 * s, 20 * s); ctx.fillStyle = '#4f86f7'; ctx.fill(); ctx.lineWidth = 4; ctx.strokeStyle = INK; ctx.stroke();
+      rr(-30 * s, -28 * s, 60 * s, 56 * s, 10 * s); ctx.fillStyle = '#3a6bd0'; ctx.fill(); ctx.stroke();
+      rr(32 * s, -26 * s, 18 * s, 52 * s, 6 * s); ctx.fillStyle = '#bfe3f7'; ctx.fill(); ctx.stroke();
+      ctx.restore();
+    }
     // 泥はね
     for (const m of this.mud) {
       ctx.fillStyle = 'rgba(110,76,48,.88)';
@@ -1342,6 +1496,7 @@ const puddle = {
       }
     }
     if (this.ruinT > 0) bigText('服がもうダメ！', W / 2, H * 0.3, 40 * s, HOT, INK, W * 0.85);
+    if (this.hapK >= 0.4) hapBanner('車に水をかけられた！', this.hapK - 0.4);
   },
   drawHint(t) {
     const g = this.geo(), p = (t * 1.1) % 1;
@@ -1602,7 +1757,7 @@ const elev = {
 };
 
 /* ---------- ボーナス: 押すなボタン ---------- */
-const NOPUSH_MSG = [[1, 'あっ'], [4, '押すなって書いてあるよね？'], [10, 'まだ押す？'], [18, '知らないよ？'], [28, 'もう好きにして'], [40, 'ボタンのほうが疲れてきた'], [55, '伝説の連打']];
+const NOPUSH_MSG = [[1, 'あっ'], [4, '押すなって書いてあるよね？'], [10, 'まだ押す？'], [18, '知らないよ？'], [28, 'もう好きにして'], [40, 'ボタンのほうが疲れてきた'], [50, '伝説の連打']];
 const nopush = {
   key: 'nopush', name: '押すなボタン', prompt: '押しちゃえ！', hint: '連打', bg: '#2a2238', done: '押しちゃった！',
   bgm: song(176, [ // 警報
@@ -1750,10 +1905,10 @@ function buildResult() {
   for (const s of BONUS ? NORMAL.concat(BONUS) : NORMAL) {
     if (!played.has(s.key)) continue;
     const b = s.bill(tot);
-    rows.push({ k: s.name, v: b.v, n: b.n });
+    rows.push({ k: s.name, v: b.v, n: b.n, yen: b.yen || 0, shop: s.shop });
     sec += b.sec || 0; yen += b.yen || 0; extra += b.angry || 0;
   }
-  yen = Math.round(yen);
+  yen = Math.max(0, Math.round(yen)); // へそくりで引いても0円より下にはしない
   // 怒られ度（%）: 損害100円で1%、後始末2分で1%、押すなボタンは2回で1%。単価は各ステージの bill() にある
   const angry = Math.min(999, Math.round(yen / 100 + sec / 120 + extra));
   const tb = 0.3 + rows.length * 0.09 + 0.2;
@@ -1765,20 +1920,25 @@ function buildResult() {
 const ZUKAN = [
   { id: 'tissue', name: 'ティッシュ全部出す係', desc: 'ティッシュを1回で40枚出す', ok: t => (t.tissueMax || 0) >= 40 },
   { id: 'roll', name: 'ロール使い切り', desc: 'トイレットペーパーを1回で30m伸ばす', ok: t => (t.tpMax || 0) >= 30 },
+  { id: 'hapRoll', name: 'ころころ', desc: 'トイレットペーパーのロールが転がっていく', secret: 'トイレットペーパーで、まれに起きる何か', ok: t => !!t.hapRoll },
   { id: 'shoji2', name: '障子やぶりの達人', desc: '障子を1回で2面、張り替えにする', ok: t => (t.shojiFullMax || 0) >= 2 },
   { id: 'shoji1', name: 'ひと穴だけ', desc: '障子を1穴だけ破って終える', ok: t => !!t.shojiOne },
+  { id: 'hapCat', name: 'ネコの手', desc: '障子やぶりにネコが参戦する', secret: '障子で、まれに起きる何か', ok: t => !!t.hapCat },
   { id: 'paste', name: 'しぼり切り', desc: '歯みがき粉を1回で1本しぼり切る', ok: t => (t.pasteMax || 0) >= TUBE_CM },
   { id: 'shampoo', name: 'あわあわ', desc: 'シャンプーを1回で50プッシュ', ok: t => (t.shampooMax || 0) >= 50 },
   { id: 'rug', name: 'クリーニング行き', desc: 'じゅうたんを泥んこにする', ok: t => (t.rug || 0) >= 1 },
+  { id: 'hapDog', name: 'イヌもいっしょ', desc: '泥んこ足にイヌがついてくる', secret: '泥んこ足で、まれに起きる何か', ok: t => !!t.hapDog },
   { id: 'lost', name: '行方不明', desc: 'おもちゃを失くす', ok: t => (t.lost || 0) >= 1 },
   { id: 'boxes', name: 'ひっくり返し屋', desc: 'おもちゃ箱を1回で5箱ひっくり返す', ok: t => (t.boxMax || 0) >= 5 },
+  { id: 'hapMoney', name: 'へそくり発見', desc: 'おもちゃ箱からへそくりが出てくる', secret: 'おもちゃ箱で、まれに起きる何か', ok: t => (t.money || 0) >= 1 },
   { id: 'clothes', name: '服がもうダメ', desc: 'タメ最大で水たまりに飛び込む', ok: t => (t.clothes || 0) >= 1 },
+  { id: 'hapCar', name: 'もらい泥', desc: '通りかかった車に水をかけられる', secret: '水たまりで、まれに起きる何か', ok: t => !!t.hapCar },
   { id: 'hose', name: '全開', desc: 'ホースを全開にする', ok: t => !!t.hoseFull },
   { id: 'laundry', name: '洗濯やり直し', desc: '洗濯物を1回で全部びしょぬれにする', ok: t => (t.wetMax || 0) >= 6 },
-  { id: 'elev', name: '各駅停車', desc: 'エレベーターのボタンを全部押す', ok: t => (t.elevMax || 0) >= EC * ER },
+  { id: 'elev', name: '各階停止', desc: 'エレベーターのボタンを全部押す', ok: t => (t.elevMax || 0) >= EC * ER },
   { id: 'broke', name: '故障', desc: 'エレベーターを故障させる', secret: 'エレベーターで、ごくまれに起きる何か', ok: t => (t.broke || 0) >= 1 },
   { id: 'nopush', name: '押しちゃった', desc: '押すなボタンを押す', ok: t => (t.nopush || 0) >= 1 },
-  { id: 'nopush55', name: '伝説の連打', desc: '押すなボタンを1回で55回押す', ok: t => (t.nopushMax || 0) >= 55 },
+  { id: 'nopush50', name: '伝説の連打', desc: '押すなボタンを1回で50回押す', ok: t => (t.nopushMax || 0) >= 50 },
   { id: 'clear', name: 'やり切った', desc: '周回モードを最後まで遊ぶ', ok: (t, g) => g.loop && g.natural },
   { id: 'goodkid', name: 'いい子', desc: '周回モードを怒られ度0%で終える', secret: '周回モードを、ある判定で終える', ok: (t, g) => g.loop && g.natural && g.res.angry === 0 },
   { id: 'legend', name: '伝説のいたずらっ子', desc: '判定「伝説のいたずらっ子」をもらう', ok: (t, g) => tierOf(g.res.angry) === 5 },
@@ -1820,6 +1980,7 @@ function finish(natural) { // natural: 最後まで遊んで終わった（中�
   hud.hidden = true; panels.pause.hidden = true;
   res = buildResult(); rt = calm ? 9 : 0;
   res.newZ = checkZukan(natural === true);
+  fillPick();
   panels.result.hidden = false; measureBar();
   $('recHint').textContent = rec ? '動画を書き出し中です…' : (recOn && canRec ? '録画を開始できませんでした。' + (recErr ? '（' + recErr + '）' : '') : '');
   fillShop();
@@ -2104,6 +2265,23 @@ function saveBlob(blob, name, text) {
   a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(u), 4000);
 }
+// 結果画面の帯に1行だけ出す紹介。いちばん損害が大きかったいたずらの買い直しか、判定に合わせた「謝るとき用」をランダムに
+const APOLOGY = [
+  ['バレる前に、こっそり片付けるコロコロ', 'コロコロ カーペットクリーナー'],
+  ['正座10分に備えて、正座椅子', '正座椅子'],
+  ['おやつ抜きの日のための、こっそりおやつ', 'お菓子 個包装 詰め合わせ'],
+  ['家族会議の前に、お詫びの菓子折り', '菓子折り'],
+  ['おこづかい停止のあいだに、貯金箱', '貯金箱'],
+  ['伝説の謝罪には、高級な菓子折り', '菓子折り 高級']
+];
+function fillPick() {
+  const top = res.rows.filter(r => r.yen > 0 && r.shop).sort((x, y) => y.yen - x.yen)[0];
+  let label, q;
+  if (top && Math.random() < 0.5) { label = 'いちばんの損害は' + top.k + '。' + top.shop[0][0] + 'を買い直す'; q = top.shop[0][1]; }
+  else [label, q] = APOLOGY[tierOf(res.angry)];
+  $('pick').href = 'https://www.amazon.co.jp/s?k=' + encodeURIComponent(q) + '&tag=' + AMAZON_TAG;
+  $('pickText').textContent = label; $('pick').hidden = false;
+}
 function fillShop() {
   const ul = $('shopList'); ul.textContent = '';
   const items = [];
@@ -2182,7 +2360,7 @@ if (document.fonts && document.fonts.load) {
 // 自動テスト用（URLの末尾が #test のときだけ）
 if (location.hash === '#test') {
   window.__itazu = { get mode() { return mode; }, get st() { return st; }, get count() { return count; }, get res() { return res; }, get tot() { return tot; },
-    get rec() { return rec; }, get AC() { return AC; }, get bus() { return bus; }, get recBlob() { return recBlob; }, NORMAL, BONUS, music, force(keys) { forced = keys.slice(); }, finish, setPause };
+    get rec() { return rec; }, get AC() { return AC; }, get bus() { return bus; }, get recBlob() { return recBlob; }, NORMAL, BONUS, music, force(keys) { forced = keys.slice(); }, set forceHap(v) { forceHap = v; }, finish, setPause };
 }
 })();
 </script>
