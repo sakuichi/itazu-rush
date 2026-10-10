@@ -785,7 +785,7 @@ Object.assign(sfx, {
   coin() { tone(988, 988, 0.08, 0.08, 'square'); tone(1319, 1319, 0.3, 0.08, 'square', 0.08); }
 });
 /* ハプニング：ステージ1回ごとに HAP_RATE の確率で、プレイ開始から1〜2.2秒のどこかで起きる（猫・へそくり・ロール・車・犬） */
-const HAP_RATE = 0.08;
+const HAP_RATE = 1; // 動作確認のため一時的に毎回起こしている（2026-10-10）。本番は 0.08
 let forceHap = false; // 自動テスト用
 const hapTime = () => (forceHap || Math.random() < HAP_RATE) ? rnd(1.0, 2.2) : -1;
 function hapBanner(text, t) { // t: 起きてからの秒数
@@ -2189,6 +2189,7 @@ let last = 0;
 function frame(ts) {
   const dt = Math.min(0.05, (ts - last) / 1000 || 0); last = ts;
   update(dt); draw();
+  if (rec && recCv) recCtx.drawImage(cv, 0, 0, recCv.width, recCv.height); // 録画用の小さいキャンバスへ写す
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
@@ -2198,7 +2199,9 @@ const canRec = !!(cv.captureStream && window.MediaRecorder);
 let recOn = false, rec = null, recBlob = null, recTok = 0, recFinish = null, recErr = '';
 try { recOn = canRec && localStorage.getItem('itazurush-rec') === '1'; } catch (e) {}
 // 録画用のストリームは一度だけ作って使い回す（毎回作り直すと、端末によっては2回目以降が録れない）
-let recVideo = null, recAV = null;
+// 容量を抑えるため、画面そのものではなく横 REC_W px の録画用キャンバスに縮小コピーしたものを録る
+const REC_W = 540;
+let recVideo = null, recAV = null, recCv = null, recCtx = null;
 function recStart() {
   recBlob = null; recTok++; recFinish = null; recErr = '';
   if (!recOn || !canRec) return;
@@ -2207,9 +2210,15 @@ function recStart() {
   let mime = '', r = null, done = false;
   const tok = recTok, chunks = [];
   try { mime = types.find(t => MediaRecorder.isTypeSupported(t)) || ''; } catch (e) {}
-  const opt = mime ? { mimeType: mime, videoBitsPerSecond: 2.5e6, audioBitsPerSecond: 128000 } : undefined;
+  const opt = mime ? { mimeType: mime, videoBitsPerSecond: 1.2e6, audioBitsPerSecond: 128000 } : undefined;
   try {
-    if (!recVideo) recVideo = cv.captureStream(30);
+    if (!recVideo) {
+      recCv = document.createElement('canvas');
+      recCv.width = REC_W; recCv.height = Math.round(REC_W * H / Math.max(1, W) / 2) * 2; // 偶数にする（動画の形式の都合）
+      recCtx = recCv.getContext('2d');
+      recCtx.drawImage(cv, 0, 0, recCv.width, recCv.height);
+      recVideo = recCv.captureStream(30);
+    }
     if (!recAV && recDest) recAV = new MediaStream(recVideo.getVideoTracks().concat(recDest.stream.getAudioTracks()));
   } catch (e) { recErr = String(e && e.message || e); }
   // 音つきで始められなければ、映像だけで録る
