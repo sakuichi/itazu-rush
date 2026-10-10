@@ -1369,14 +1369,15 @@ const puddle = {
   update(dt) {
     this.t += dt; this.shake = Math.max(0, this.shake - dt * 3);
     const g = this.geo(), s = g.s;
-    // ハプニング：通りかかった車に、逆に泥水をかけられる
+    // ハプニング：左側の車道を車が通りかかり、逆に泥水をかけられる（車そのものは画面に出さない）
     if (this.hapK >= 0) this.hapK += dt;
     if (scoring()) {
       this.pt += dt;
       if (this.hapAt >= 0 && this.hapK < 0 && this.pt >= this.hapAt) { this.hapK = 0; sfx.car(); }
-      if (this.hapK >= 0.4 && !this.carHit) {
+      if (this.hapK >= 0.35 && !this.carHit) {
         this.carHit = true; this.shake = 1; sfx.splash(1); sfx.hap();
-        for (let i = 0; i < 14; i++) this.mud.push({ x: rnd(0, W), y: rnd(0, H * 0.7), r: rnd(14, 30) * s, seed: Math.random() * 99 });
+        for (let i = 0; i < 40; i++) this.drops.push({ x: rnd(-20, 10) * s, y: rnd(H * 0.25, H * 0.85), vx: rnd(600, 1200) * s, vy: rnd(-350, 50) * s, life: rnd(0.5, 0.9), r: rnd(4, 9) * s });
+        for (let i = 0; i < 14; i++) this.mud.push({ x: W * 0.9 * Math.pow(Math.random(), 1.8), y: rnd(H * 0.15, H * 0.9), r: rnd(14, 30) * s, seed: Math.random() * 99 }); // 車道側（左）ほど多い
         this.spots += 14;
       }
     }
@@ -1479,13 +1480,11 @@ const puddle = {
       ctx.lineCap = 'butt';
       bigText(this.charge >= 1 ? 'MAX!' : 'タメ', g.cx, g.cy, 26 * s, PAPER, INK, r * 1.6);
     }
-    if (this.hapK >= 0 && this.hapK < 0.9) { // 通りすぎる車（上から見たところ）
-      const cx = -170 * s + (W + 340 * s) * this.hapK / 0.8, cy = H * 0.2;
-      ctx.save(); ctx.translate(cx, cy);
-      ctx.fillStyle = INK; for (const [wx, wy] of [[-45, -36], [45, -36], [-45, 36], [45, 36]]) { rr((wx - 14) * s, (wy - 7) * s, 28 * s, 14 * s, 4 * s); ctx.fill(); }
-      rr(-80 * s, -36 * s, 160 * s, 72 * s, 20 * s); ctx.fillStyle = '#4f86f7'; ctx.fill(); ctx.lineWidth = 4; ctx.strokeStyle = INK; ctx.stroke();
-      rr(-30 * s, -28 * s, 60 * s, 56 * s, 10 * s); ctx.fillStyle = '#3a6bd0'; ctx.fill(); ctx.stroke();
-      rr(32 * s, -26 * s, 18 * s, 52 * s, 6 * s); ctx.fillStyle = '#bfe3f7'; ctx.fill(); ctx.stroke();
+    if (this.hapK >= 0.3 && this.hapK < 0.8) { // 左（車道側）から押し寄せる水のかたまり
+      const k = (this.hapK - 0.3) / 0.5, x1 = W * (0.15 + 0.7 * k);
+      ctx.save(); ctx.globalAlpha = 0.55 * (1 - k);
+      const gr = ctx.createLinearGradient(0, 0, x1, 0); gr.addColorStop(0, '#d6ecfa'); gr.addColorStop(1, 'rgba(214,236,250,0)');
+      ctx.fillStyle = gr; ctx.beginPath(); ctx.moveTo(0, H * 0.15); ctx.quadraticCurveTo(x1, H * 0.5, 0, H * 0.95); ctx.closePath(); ctx.fill();
       ctx.restore();
     }
     // 泥はね
@@ -1498,7 +1497,7 @@ const puddle = {
       }
     }
     if (this.ruinT > 0) bigText('服がもうダメ！', W / 2, H * 0.3, 40 * s, HOT, INK, W * 0.85);
-    if (this.hapK >= 0.4) hapBanner('車に水をかけられた！', this.hapK - 0.4);
+    if (this.hapK >= 0.35) hapBanner('車に水をかけられた！', this.hapK - 0.35);
   },
   drawHint(t) {
     const g = this.geo(), p = (t * 1.1) % 1;
