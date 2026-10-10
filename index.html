@@ -1896,7 +1896,7 @@ function fmtTime(sec) {
   return m < 60 ? m + '分' : Math.floor(m / 60) + '時間' + (m % 60 ? (m % 60) + '分' : '');
 }
 // 判定の段階（0〜5）。挑戦状の入口ページ c/段階.html もこの段階で分ける
-const tierOf = a => a < 1 ? 0 : a < 30 ? 1 : a < 70 ? 2 : a < 120 ? 3 : a < 200 ? 4 : 5;
+const tierOf = a => a < 1 ? 0 : a < 30 ? 1 : a < 70 ? 2 : a < 120 ? 3 : a < 250 ? 4 : 5;
 function verdict(a) {
   return ['まだバレてない', '正座10分', 'おやつ抜き', '家族会議', 'おこづかい3か月停止', '伝説のいたずらっ子'][tierOf(a)];
 }
@@ -1940,6 +1940,7 @@ const ZUKAN = [
   { id: 'broke', name: '故障', desc: 'エレベーターを故障させる', secret: 'エレベーターで、ごくまれに起きる何か', ok: t => (t.broke || 0) >= 1 },
   { id: 'nopush', name: '押しちゃった', desc: '押すなボタンを押す', ok: t => (t.nopush || 0) >= 1 },
   { id: 'nopushLegend', name: '伝説の連打', desc: '押すなボタンを1回で40回押す', ok: t => (t.nopushMax || 0) >= 40 },
+  { id: 'round', name: 'いたずらっ子', desc: '全10種のいたずらを1周する（どちらのモードでも）', ok: (t, g) => g.count >= N },
   { id: 'clear', name: 'やり切った', desc: '周回モードを最後まで遊ぶ', ok: (t, g) => g.loop && g.natural },
   { id: 'goodkid', name: 'いい子', desc: '周回モードを怒られ度0%で終える', secret: '周回モードを、ある判定で終える', ok: (t, g) => g.loop && g.natural && g.res.angry === 0 },
   { id: 'legend', name: '伝説のいたずらっ子', desc: '判定「伝説のいたずらっ子」をもらう', ok: (t, g) => tierOf(g.res.angry) === 5 },
