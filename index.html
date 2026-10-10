@@ -787,7 +787,7 @@ Object.assign(sfx, {
   coin() { tone(988, 988, 0.08, 0.08, 'square'); tone(1319, 1319, 0.3, 0.08, 'square', 0.08); }
 });
 /* ハプニング：ステージ1回ごとに HAP_RATE の確率で、プレイ開始から1〜2.2秒のどこかで起きる（猫・へそくり・ロール・車・犬） */
-const HAP_RATE = 1; // 動作確認のため一時的に毎回起こしている（2026-10-10）。本番は 0.08
+const HAP_RATE = 0.08;
 let forceHap = false; // 自動テスト用
 const hapTime = (a = 1.0, b = 2.2) => (forceHap || Math.random() < HAP_RATE) ? rnd(a, b) : -1;
 function hapBanner(text, t) { // t: 起きてからの秒数
@@ -1657,7 +1657,6 @@ const hose = {
 
 /* ---------- ステージ10: エレベーター ---------- */
 const EC = 3, ER = 8; // ボタンの列と段
-const ELEV_BREAK = 0.04; // 全部押し終えるたびに、故障する確率（めったに起きないが、起きるといちばん効く）
 const elev = {
   key: 'elev', name: 'エレベーター', prompt: '全部押せ！', hint: 'タップ、またはなぞって全部', bg: '#c9ced6',
   bgm: song(108, [ // エレベーターの中に流れていそうな音楽
@@ -1669,7 +1668,7 @@ const elev = {
     const n = t.elev || 0, b = t.broke || 0;
     return { v: n + '階分', n: b ? '故障させて点検（作業員の出動費）' + (b > 1 ? b + '回' : '') : '全部の階に止まる（乗り合わせた人も巻きぞえ）', sec: n * 10 + b * 7200, yen: b * 20000 };
   },
-  init() { this.n = 0; this.lit = new Array(EC * ER).fill(0); this.old = null; this.slide = 0; this.wait = 0; this.t = 0; this.ptr = {}; this.cars = 1; this.banner = 0; this.broken = false; this.breakT = 0; },
+  init() { this.n = 0; this.lit = new Array(EC * ER).fill(0); this.old = null; this.slide = 0; this.wait = 0; this.t = 0; this.ptr = {}; this.cars = 1; this.banner = 0; this.broken = false; this.breakT = 0; this.willBreak = hapTime() >= 0; }, // 故障もハプニングの1つ。起きる回なら、最初に全部押し終えたときに故障する
   started() { return this.n > 0; },
   result() { return this.n + '階分'; },
   commit(tot) { add(tot, 'elev', this.n); add(tot, 'broke', this.broken ? 1 : 0); mx(tot, 'elevMax', this.n); },
@@ -1689,7 +1688,7 @@ const elev = {
     if (best < 0 || this.lit[best]) return;
     this.lit[best] = 1; this.n++; sfx.ding(this.floor(best));
     if (this.lit.every(Boolean)) { // 全部光ったら次のエレベーターへ。ごくまれに故障する
-      if (Math.random() < (this.forceBreak ? 1 : ELEV_BREAK)) { this.broken = true; this.breakT = 1.8; sfx.broke(); }
+      if (this.willBreak || this.forceBreak) { this.broken = true; this.breakT = 1.8; sfx.broke(); }
       else this.wait = 0.2;
     }
   },
@@ -1897,7 +1896,7 @@ function fmtTime(sec) {
   return m < 60 ? m + '分' : Math.floor(m / 60) + '時間' + (m % 60 ? (m % 60) + '分' : '');
 }
 // 判定の段階（0〜5）。挑戦状の入口ページ c/段階.html もこの段階で分ける
-const tierOf = a => a < 1 ? 0 : a < 25 ? 1 : a < 60 ? 2 : a < 105 ? 3 : a < 180 ? 4 : 5;
+const tierOf = a => a < 1 ? 0 : a < 30 ? 1 : a < 70 ? 2 : a < 120 ? 3 : a < 200 ? 4 : 5;
 function verdict(a) {
   return ['まだバレてない', '正座10分', 'おやつ抜き', '家族会議', 'おこづかい3か月停止', '伝説のいたずらっ子'][tierOf(a)];
 }
