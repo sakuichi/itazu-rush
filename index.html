@@ -783,7 +783,7 @@ Object.assign(sfx, {
   hap() { [660, 880, 1320, 1760].forEach((f, i) => tone(f, f, 0.12, 0.08, 'square', i * 0.07)); },
   meow() { tone(700, 1100, 0.12, 0.08, 'sine'); tone(1100, 600, 0.25, 0.08, 'sine', 0.12); },
   woof() { tone(320, 180, 0.12, 0.2, 'sawtooth'); noise(0.1, 600, 1, 0.15, 'bandpass'); },
-  car() { noise(0.7, 300, 0.5, 0.35, 'lowpass'); tone(90, 140, 0.6, 0.15, 'sawtooth'); },
+  alarm() { for (let i = 0; i < 6; i++) tone(i % 2 ? 900 : 1250, i % 2 ? 900 : 1250, 0.14, 0.07, 'square', 0.15 + i * 0.17); },
   coin() { tone(988, 988, 0.08, 0.08, 'square'); tone(1319, 1319, 0.3, 0.08, 'square', 0.08); }
 });
 /* ハプニング：ステージ1回ごとに HAP_RATE の確率で、プレイ開始から1〜2.2秒のどこかで起きる（猫・へそくり・ロール・車・犬） */
@@ -1341,17 +1341,47 @@ const puddle = {
     ['square', 0.05, '38 . . 38 . . 45 . 43 . . 41 . . 40 . 38 . . 38 . . 45 . 47 . . 48 . . 45 .']
   ], ['k..s..k.k.s..h.hk..s..k.k.s.sss.']),
   shop: [['泥汚れ用の洗剤', '泥汚れ 洗剤'], ['子ども用レインコート', 'キッズ レインコート']],
-  bill(t) { const n = t.puddle || 0, c = t.clothes || 0; return { v: n + 'か所', n: '泥はね' + (c ? '・買い替えた服 ' + c + '着' : '・服と長靴を洗う'), sec: n * 10, yen: c * 1000 }; },
+  bill(t) {
+    const n = t.puddle || 0, c = t.clothes || 0, w = t.carWash || 0;
+    return { v: n + 'か所', n: '泥はね' + (c ? '・買い替えた服 ' + c + '着' : '・服と長靴を洗う') + (w ? '・となりの車の洗車代' : ''), sec: n * 10, yen: c * 1000 + w * 1500 };
+  },
   init() {
-    this.hapAt = hapTime(); this.pt = 0; this.hapK = -1; this.carHit = false;
+    this.hapAt = hapTime(); this.pt = 0; this.hapK = -1; this.carArmed = false; this.carHit = false; this.carMud = [];
     this.spots = 0; this.jumps = 0; this.ruined = false; this.ruinT = 0; this.queued = null; this.hold = null; this.charge = 0; this.state = 'ready'; this.k = 0; this.power = 0; this.t = 0; this.shake = 0; this.ct = 0;
     this.drops = []; this.mud = []; this.rings = [];
     this.shape = []; for (let i = 0; i < 14; i++) this.shape.push(0.82 + Math.random() * 0.3);
   },
   started() { return this.jumps > 0 || this.state === 'charge'; },
   result() { return this.spots + 'か所'; },
-  commit(tot) { add(tot, 'puddle', this.spots); add(tot, 'jumps', this.jumps); add(tot, 'clothes', this.ruined ? 1 : 0); if (this.carHit) tot.hapCar = 1; },
+  commit(tot) { add(tot, 'puddle', this.spots); add(tot, 'jumps', this.jumps); add(tot, 'clothes', this.ruined ? 1 : 0); if (this.carHit) tot.hapCar = 1; add(tot, 'carWash', this.carHit ? 1 : 0); },
   geo() { const s = SC(); return { s, cx: W / 2, cy: H * 0.5, R: Math.min(W * 0.42, H * 0.3) }; },
+  carGeo() { const s = SC(), w = 118 * s, L = 250 * s; return { s, w, L, x: 40 * s - w / 2, y: H * 0.15 }; },
+  drawCar() { // 左の車道に停めてある白い車（上から見たところ。前が上）
+    const c = this.carGeo(), s = c.s, x = c.x, y = c.y, w = c.w, L = c.L;
+    rr(x + 7 * s, y + 9 * s, w, L, 34 * s); ctx.fillStyle = 'rgba(0,0,0,.2)'; ctx.fill();
+    ctx.fillStyle = INK;
+    for (const wy of [y + 38 * s, y + L - 84 * s]) { rr(x - 7 * s, wy, 16 * s, 46 * s, 5 * s); ctx.fill(); rr(x + w - 9 * s, wy, 16 * s, 46 * s, 5 * s); ctx.fill(); }
+    rr(x, y, w, L, 34 * s); ctx.fillStyle = '#f4f6f8'; ctx.fill(); ctx.lineWidth = 4; ctx.strokeStyle = INK; ctx.stroke();
+    ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(35,27,46,.25)';
+    ctx.beginPath(); ctx.moveTo(x + w * 0.3, y + 14 * s); ctx.lineTo(x + w * 0.32, y + 62 * s); ctx.moveTo(x + w * 0.7, y + 14 * s); ctx.lineTo(x + w * 0.68, y + 62 * s); ctx.stroke();
+    ctx.fillStyle = '#5c6f86';
+    ctx.beginPath(); ctx.moveTo(x + 22 * s, y + 70 * s); ctx.lineTo(x + w - 22 * s, y + 70 * s); ctx.lineTo(x + w - 13 * s, y + 106 * s); ctx.lineTo(x + 13 * s, y + 106 * s); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(x + 15 * s, y + 194 * s); ctx.lineTo(x + w - 15 * s, y + 194 * s); ctx.lineTo(x + w - 22 * s, y + 216 * s); ctx.lineTo(x + 22 * s, y + 216 * s); ctx.closePath(); ctx.fill();
+    rr(x + 15 * s, y + 110 * s, w - 30 * s, 80 * s, 10 * s); ctx.fillStyle = '#e4e8ec'; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(35,27,46,.3)'; ctx.stroke();
+    ctx.fillStyle = '#f4f6f8'; ctx.lineWidth = 3; ctx.strokeStyle = INK;
+    for (const ex of [x - 9 * s, x + w + 9 * s]) { ctx.beginPath(); ctx.ellipse(ex, y + 96 * s, 8 * s, 5 * s, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }
+    ctx.fillStyle = '#fff6c8'; for (const hx of [x + 14 * s, x + w - 34 * s]) { rr(hx, y + 4 * s, 20 * s, 8 * s, 3 * s); ctx.fill(); }
+    ctx.fillStyle = '#e0413a'; for (const hx of [x + 12 * s, x + w - 32 * s]) { rr(hx, y + L - 11 * s, 20 * s, 7 * s, 3 * s); ctx.fill(); }
+    for (const m of this.carMud) { // かかった泥
+      const mx3 = x + m.u * w, my = y + m.v * L;
+      ctx.fillStyle = 'rgba(110,76,48,.92)'; ctx.beginPath(); ctx.arc(mx3, my, m.r, 0, Math.PI * 2); ctx.fill();
+      for (let k = 0; k < 4; k++) { const a = sr(m.seed + k) * Math.PI * 2, d = m.r * 1.5; ctx.beginPath(); ctx.arc(mx3 + Math.cos(a) * d, my + Math.sin(a) * d, m.r * 0.3, 0, Math.PI * 2); ctx.fill(); }
+    }
+    if (this.hapK >= 0 && this.hapK < 3 && Math.floor(this.hapK * 4) % 2 === 0) { // ハザードランプ
+      ctx.fillStyle = 'rgba(255,170,40,.95)';
+      for (const [hx, hy] of [[x + 6 * s, y + 6 * s], [x + w - 6 * s, y + 6 * s], [x + 6 * s, y + L - 6 * s], [x + w - 6 * s, y + L - 6 * s]]) { ctx.beginPath(); ctx.arc(hx, hy, 9 * s, 0, Math.PI * 2); ctx.fill(); }
+    }
+  },
   down(id) {
     if (this.hold != null) return;
     if (this.state === 'air') { this.queued = id; return; } // 空中で押したら、着地してすぐタメに入る
@@ -1369,17 +1399,11 @@ const puddle = {
   update(dt) {
     this.t += dt; this.shake = Math.max(0, this.shake - dt * 3);
     const g = this.geo(), s = g.s;
-    // ハプニング：左側の車道を車が通りかかり、逆に泥水をかけられる（車そのものは画面に出さない）
+    // ハプニング：起きる回は、この時刻のあとの最初のジャンプで、左の車道に停めてある車に泥がかかる
     if (this.hapK >= 0) this.hapK += dt;
     if (scoring()) {
       this.pt += dt;
-      if (this.hapAt >= 0 && this.hapK < 0 && this.pt >= this.hapAt) { this.hapK = 0; sfx.car(); }
-      if (this.hapK >= 0.35 && !this.carHit) {
-        this.carHit = true; this.shake = 1; sfx.splash(1); sfx.hap();
-        for (let i = 0; i < 40; i++) this.drops.push({ x: rnd(-20, 10) * s, y: rnd(H * 0.25, H * 0.85), vx: rnd(600, 1200) * s, vy: rnd(-350, 50) * s, life: rnd(0.5, 0.9), r: rnd(4, 9) * s });
-        for (let i = 0; i < 14; i++) this.mud.push({ x: W * 0.9 * Math.pow(Math.random(), 1.8), y: rnd(H * 0.15, H * 0.9), r: rnd(14, 30) * s, seed: Math.random() * 99 }); // 車道側（左）ほど多い
-        this.spots += 14;
-      }
+      if (this.hapAt >= 0 && !this.carArmed && this.pt >= this.hapAt) this.carArmed = true;
     }
     if (this.state === 'charge') {
       this.charge = Math.min(1, this.charge + dt / 0.5);
@@ -1412,6 +1436,12 @@ const puddle = {
     if (scoring()) {
       this.spots += nm; // 時間切れのあとに着地した分は数えない
       if (p >= 1 && !this.ruined) { this.ruined = true; this.ruinT = 1.3; } // タメ最大で飛び込むと、服がもうだめ
+    }
+    if (this.carArmed && !this.carHit && scoring()) { // となりの車に泥がかかる
+      this.carHit = true; this.hapK = 0; sfx.alarm(); sfx.hap();
+      for (let i = 0; i < 12; i++) this.carMud.push({ u: rnd(0.4, 0.95), v: rnd(0.05, 0.95), r: rnd(6, 16) * s, seed: Math.random() * 99 });
+      const c = this.carGeo(), ox = g.cx - g.R * 0.6, oy = g.cy - g.R * 0.2;
+      for (let i = 0; i < 18; i++) this.drops.push({ x: ox, y: oy, vx: (c.x + c.w * 0.7 - ox) * rnd(1.5, 2.6), vy: (c.y + c.L * rnd(0.3, 0.9) - oy) * rnd(1.5, 2.6), life: rnd(0.35, 0.55), r: rnd(4, 8) * s });
     }
     if (this.queued != null) { this.hold = this.queued; this.queued = null; this.state = 'charge'; this.charge = 0; }
     this.rings.push({ x: g.cx, y: g.cy, k: 0, d: 0.6, r: g.R * 1.1 });
@@ -1447,6 +1477,7 @@ const puddle = {
     [[0, 0, 1], [0.22, -0.06, 0.8], [-0.2, 0.04, 0.7]].forEach(([ox, oy, k]) => { ctx.beginPath(); ctx.ellipse(cx0 + ox * g.R, g.cy - g.R * 0.15 + oy * g.R, g.R * 0.22 * k, g.R * 0.1 * k, 0, 0, Math.PI * 2); ctx.fill(); });
     ctx.restore();
     path(); ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(35,27,46,.45)'; ctx.stroke();
+    this.drawCar(); // 水たまりの一部は停めてある車の下に入る
     ctx.lineWidth = 2;
     for (const r of this.rings) {
       ctx.globalAlpha = 1 - r.k; ctx.strokeStyle = '#ffffff';
@@ -1480,13 +1511,6 @@ const puddle = {
       ctx.lineCap = 'butt';
       bigText(this.charge >= 1 ? 'MAX!' : 'タメ', g.cx, g.cy, 26 * s, PAPER, INK, r * 1.6);
     }
-    if (this.hapK >= 0.3 && this.hapK < 0.8) { // 左（車道側）から押し寄せる水のかたまり
-      const k = (this.hapK - 0.3) / 0.5, x1 = W * (0.15 + 0.7 * k);
-      ctx.save(); ctx.globalAlpha = 0.55 * (1 - k);
-      const gr = ctx.createLinearGradient(0, 0, x1, 0); gr.addColorStop(0, '#d6ecfa'); gr.addColorStop(1, 'rgba(214,236,250,0)');
-      ctx.fillStyle = gr; ctx.beginPath(); ctx.moveTo(0, H * 0.15); ctx.quadraticCurveTo(x1, H * 0.5, 0, H * 0.95); ctx.closePath(); ctx.fill();
-      ctx.restore();
-    }
     // 泥はね
     for (const m of this.mud) {
       ctx.fillStyle = 'rgba(110,76,48,.88)';
@@ -1497,7 +1521,7 @@ const puddle = {
       }
     }
     if (this.ruinT > 0) bigText('服がもうダメ！', W / 2, H * 0.3, 40 * s, HOT, INK, W * 0.85);
-    if (this.hapK >= 0.35) hapBanner('車に水をかけられた！', this.hapK - 0.35);
+    hapBanner('となりの車に泥がかかった！', this.hapK);
   },
   drawHint(t) {
     const g = this.geo(), p = (t * 1.1) % 1;
@@ -1896,7 +1920,7 @@ function fmtTime(sec) {
   return m < 60 ? m + '分' : Math.floor(m / 60) + '時間' + (m % 60 ? (m % 60) + '分' : '');
 }
 // 判定の段階（0〜5）。挑戦状の入口ページ c/段階.html もこの段階で分ける
-const tierOf = a => a < 1 ? 0 : a < 30 ? 1 : a < 70 ? 2 : a < 120 ? 3 : a < 250 ? 4 : 5;
+const tierOf = a => a < 1 ? 0 : a < 30 ? 1 : a < 70 ? 2 : a < 150 ? 3 : a < 250 ? 4 : 5;
 function verdict(a) {
   return ['まだバレてない', '正座10分', 'おやつ抜き', '家族会議', 'おこづかい3か月停止', '伝説のいたずらっ子'][tierOf(a)];
 }
@@ -1933,7 +1957,7 @@ const ZUKAN = [
   { id: 'boxes', name: 'ひっくり返し屋', desc: 'おもちゃ箱を1回で5箱ひっくり返す', ok: t => (t.boxMax || 0) >= 5 },
   { id: 'hapMoney', name: 'へそくり発見', desc: 'おもちゃ箱からへそくりが出てくる', secret: 'おもちゃ箱で、まれに起きる何か', ok: t => (t.money || 0) >= 1 },
   { id: 'clothes', name: '服がもうダメ', desc: 'タメ最大で水たまりに飛び込む', ok: t => (t.clothes || 0) >= 1 },
-  { id: 'hapCar', name: 'もらい泥', desc: '通りかかった車に水をかけられる', secret: '水たまりで、まれに起きる何か', ok: t => !!t.hapCar },
+  { id: 'hapCar', name: '洗車代', desc: 'となりに停めてある車に泥をかける', secret: '水たまりで、まれに起きる何か', ok: t => !!t.hapCar },
   { id: 'hose', name: '全開', desc: 'ホースを全開にする', ok: t => !!t.hoseFull },
   { id: 'laundry', name: '洗濯やり直し', desc: '洗濯物を1回で全部びしょぬれにする', ok: t => (t.wetMax || 0) >= 6 },
   { id: 'elev', name: '各階停止', desc: 'エレベーターのボタンを全部押す', ok: t => (t.elevMax || 0) >= EC * ER },
