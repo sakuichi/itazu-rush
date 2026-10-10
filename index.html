@@ -656,12 +656,14 @@ const shoji = {
         const free = this.panes.map((p, i) => p ? -1 : i).filter(i => i >= 0);
         if (free.length) { const i = free[Math.floor(Math.random() * free.length)]; this.hapK = 0; this.cat = { i, panes: this.panes }; this.hitPane(i); sfx.meow(); sfx.hap(); }
       }
-      if (this.cat && this.hapK < 2.2 && this.catN < 6 && this.cat.panes === this.panes) {
-        this.catT -= dt;
-        if (this.catT <= 0) {
-          this.catT = 0.3;
-          const free = this.panes.map((p, i) => p ? -1 : i).filter(i => i >= 0);
-          if (free.length) { this.hitPane(free[Math.floor(Math.random() * free.length)]); this.catN++; }
+      // ネコはプレイが終わるまで破り続ける。障子が次の面に替わったら、新しい面でまた顔を出す
+      if (this.cat && this.slide === 0 && this.wait === 0) {
+        const free = this.panes.map((p, i) => p ? -1 : i).filter(i => i >= 0);
+        if (this.cat.panes !== this.panes && free.length) {
+          const i = free[Math.floor(Math.random() * free.length)]; this.cat = { i, panes: this.panes }; this.hitPane(i); sfx.meow();
+        } else {
+          this.catT -= dt;
+          if (this.catT <= 0 && free.length) { this.catT = 0.15; this.hitPane(free[Math.floor(Math.random() * free.length)]); this.catN++; }
         }
       }
     }
@@ -787,7 +789,7 @@ Object.assign(sfx, {
 /* ハプニング：ステージ1回ごとに HAP_RATE の確率で、プレイ開始から1〜2.2秒のどこかで起きる（猫・へそくり・ロール・車・犬） */
 const HAP_RATE = 1; // 動作確認のため一時的に毎回起こしている（2026-10-10）。本番は 0.08
 let forceHap = false; // 自動テスト用
-const hapTime = () => (forceHap || Math.random() < HAP_RATE) ? rnd(1.0, 2.2) : -1;
+const hapTime = (a = 1.0, b = 2.2) => (forceHap || Math.random() < HAP_RATE) ? rnd(a, b) : -1;
 function hapBanner(text, t) { // t: 起きてからの秒数
   if (t < 0 || t > 1.6) return;
   const e = calm ? 1 : Math.min(1, t / 0.15);
@@ -1037,7 +1039,7 @@ const mud = {
   ], ['k.s.k.s.kks.k.s.k.s.k.s.kks.k.s.']),
   shop: [['ラグ用のクリーナー', 'カーペットクリーナー'], ['玄関マット', '玄関マット']],
   bill(t) { const n = t.mud || 0, c = t.rug || 0; return { v: n + '歩', n: c ? 'じゅうたんのクリーニング ' + c + '回・床ふき' : '床ふき', sec: n * 10, yen: c * 1500 }; },
-  init() { this.n = 0; this.onRug = 0; this.prints = []; this.ptr = {}; this.drops = []; this.t = 0; this.ruinT = 0; this.hapAt = hapTime(); this.pt = 0; this.hapK = -1; this.dog = null; },
+  init() { this.n = 0; this.onRug = 0; this.prints = []; this.ptr = {}; this.drops = []; this.t = 0; this.ruinT = 0; this.hapAt = hapTime(0.3, 0.8); this.pt = 0; this.hapK = -1; this.dog = null; }, // イヌは早めに来る
   started() { return this.n > 0; },
   result() { return this.n + '歩'; },
   commit(tot) { add(tot, 'mud', this.n); add(tot, 'rug', this.onRug >= MUD_RUIN ? 1 : 0); if (this.hapK >= 0) tot.hapDog = 1; },
@@ -1079,7 +1081,7 @@ const mud = {
       this.pt += dt;
       if (this.hapAt >= 0 && this.hapK < 0 && this.pt >= this.hapAt) { this.hapK = 0; this.dog = { x: W * 0.5, y: g.top + 8 * s, a: Math.PI / 2, acc: 0, side: 1 }; sfx.woof(); sfx.hap(); }
       const d = this.dog;
-      if (d && this.hapK < 2.2) {
+      if (d) { // イヌはプレイが終わるまで歩き回る
         d.a += Math.sin(this.t * 5) * dt * 3;
         const sp = 280 * s * dt;
         d.x += Math.cos(d.a) * sp; d.y += Math.sin(d.a) * sp;
@@ -1150,9 +1152,9 @@ const mud = {
     if (this.onRug >= MUD_RUIN) { rr(g.rx, g.ry, g.rw, g.rh, 10 * s); ctx.fillStyle = 'rgba(96,62,32,.12)'; ctx.fill(); }
     // 足あと
     for (const p of this.prints) this.foot(p, s);
-    if (this.dog && this.hapK < 2.6) { // イヌ（上から見たところ）
+    if (this.dog) { // イヌ（上から見たところ）
       const d = this.dog;
-      ctx.save(); ctx.globalAlpha = Math.min(1, (2.6 - this.hapK) * 3); ctx.translate(d.x, d.y); ctx.rotate(d.a);
+      ctx.save(); ctx.translate(d.x, d.y); ctx.rotate(d.a);
       ctx.fillStyle = '#e8c39e'; ctx.strokeStyle = INK; ctx.lineWidth = 3;
       ctx.beginPath(); ctx.ellipse(-16 * s, 0, 20 * s, 12 * s, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(-34 * s, 0); ctx.lineTo(-44 * s, Math.sin(this.t * 25) * 6 * s); ctx.stroke();
@@ -1757,7 +1759,7 @@ const elev = {
 };
 
 /* ---------- ボーナス: 押すなボタン ---------- */
-const NOPUSH_MSG = [[1, 'あっ'], [4, '押すなって書いてあるよね？'], [10, 'まだ押す？'], [18, '知らないよ？'], [28, 'もう好きにして'], [40, 'ボタンのほうが疲れてきた'], [50, '伝説の連打']];
+const NOPUSH_MSG = [[1, 'あっ'], [4, '押すなって書いてあるよね？'], [10, 'まだ押す？'], [18, '知らないよ？'], [24, 'もう好きにして'], [32, 'ボタンのほうが疲れてきた'], [40, '伝説の連打']];
 const nopush = {
   key: 'nopush', name: '押すなボタン', prompt: '押しちゃえ！', hint: '連打', bg: '#2a2238', done: '押しちゃった！',
   bgm: song(176, [ // 警報
@@ -1829,13 +1831,14 @@ const BONUS = nopush;
 const N = NORMAL.length;
 const ROUNDS = 2;          // 周回モードの周回数（全ステージが揃ってから調整）
 const BONUS_RATE = 0.05;   // 無限モードで、1周目のあと各ステージの後に押すなボタンが割り込む確率
-const PLAY = [6, 5, 4], PROMPT = [1.0, 0.8, 0.65], FLASH = [1.0, 0.85, 0.7], RATE = [1, 1.1, 1.2]; // 周回ごと。4周目以降は最後の値
+// 周回ごと。4周目以降は最後の値。周回モード全体の録画が X の無料ユーザーの上限（140秒）に収まるよう、約136秒にしている
+const PLAY = [5, 4.5, 4], PROMPT = [0.8, 0.7, 0.65], FLASH = [0.8, 0.7, 0.65], RATE = [1, 1.1, 1.2];
 const SITE = 'https://sakuichi.github.io/itazu-rush/';
 const add = (t, k, v) => { t[k] = (t[k] || 0) + v; };
 const mx = (t, k, v) => { t[k] = Math.max(t[k] || 0, v); }; // 1回のステージでの最高（図鑑の判定用）
 let mode = 'title', gameMode = 'loop', st = null, tm = 0, paused = false, clock = 0, committed = true;
 let count = 0, order = [], isBonus = false, lastBonus = false, bonusDone = false, played = new Set(), forced = [];
-let tot = {}, res = null, rt = 0, barH = 0;
+let tot = {}, res = null, rt = 0, barH = 0, doneText = '';
 // 結果のボタン帯がキャンバスの下から何pxを占めるか（結果カードはその上に収める）
 function measureBar() { barH = Math.max(0, cv.getBoundingClientRect().bottom - $('resbar').getBoundingClientRect().top); }
 const hud = $('hud');
@@ -1895,7 +1898,7 @@ function fmtTime(sec) {
   return m < 60 ? m + '分' : Math.floor(m / 60) + '時間' + (m % 60 ? (m % 60) + '分' : '');
 }
 // 判定の段階（0〜5）。挑戦状の入口ページ c/段階.html もこの段階で分ける
-const tierOf = a => a < 1 ? 0 : a < 30 ? 1 : a < 70 ? 2 : a < 120 ? 3 : a < 200 ? 4 : 5;
+const tierOf = a => a < 1 ? 0 : a < 25 ? 1 : a < 60 ? 2 : a < 105 ? 3 : a < 180 ? 4 : 5;
 function verdict(a) {
   return ['まだバレてない', '正座10分', 'おやつ抜き', '家族会議', 'おこづかい3か月停止', '伝説のいたずらっ子'][tierOf(a)];
 }
@@ -1918,14 +1921,14 @@ function buildResult() {
 // ok(tot, g) が true になったら登録。g = { natural: 最後まで遊んだ, loop: 周回モード, count: 遊んだ本数, played, res }
 // secret: 達成するまで条件も伏せる
 const ZUKAN = [
-  { id: 'tissue', name: 'ティッシュ全部出す係', desc: 'ティッシュを1回で40枚出す', ok: t => (t.tissueMax || 0) >= 40 },
-  { id: 'roll', name: 'ロール使い切り', desc: 'トイレットペーパーを1回で30m伸ばす', ok: t => (t.tpMax || 0) >= 30 },
+  { id: 'tissue', name: 'ティッシュ全部出す係', desc: 'ティッシュを1回で35枚出す', ok: t => (t.tissueMax || 0) >= 35 },
+  { id: 'roll', name: 'ロール使い切り', desc: 'トイレットペーパーを1回で25m伸ばす', ok: t => (t.tpMax || 0) >= 25 },
   { id: 'hapRoll', name: 'ころころ', desc: 'トイレットペーパーのロールが転がっていく', secret: 'トイレットペーパーで、まれに起きる何か', ok: t => !!t.hapRoll },
   { id: 'shoji2', name: '障子やぶりの達人', desc: '障子を1回で2面、張り替えにする', ok: t => (t.shojiFullMax || 0) >= 2 },
   { id: 'shoji1', name: 'ひと穴だけ', desc: '障子を1穴だけ破って終える', ok: t => !!t.shojiOne },
   { id: 'hapCat', name: 'ネコの手', desc: '障子やぶりにネコが参戦する', secret: '障子で、まれに起きる何か', ok: t => !!t.hapCat },
   { id: 'paste', name: 'しぼり切り', desc: '歯みがき粉を1回で1本しぼり切る', ok: t => (t.pasteMax || 0) >= TUBE_CM },
-  { id: 'shampoo', name: 'あわあわ', desc: 'シャンプーを1回で50プッシュ', ok: t => (t.shampooMax || 0) >= 50 },
+  { id: 'shampoo', name: 'あわあわ', desc: 'シャンプーを1回で45プッシュ', ok: t => (t.shampooMax || 0) >= 45 },
   { id: 'rug', name: 'クリーニング行き', desc: 'じゅうたんを泥んこにする', ok: t => (t.rug || 0) >= 1 },
   { id: 'hapDog', name: 'イヌもいっしょ', desc: '泥んこ足にイヌがついてくる', secret: '泥んこ足で、まれに起きる何か', ok: t => !!t.hapDog },
   { id: 'lost', name: '行方不明', desc: 'おもちゃを失くす', ok: t => (t.lost || 0) >= 1 },
@@ -1938,7 +1941,7 @@ const ZUKAN = [
   { id: 'elev', name: '各階停止', desc: 'エレベーターのボタンを全部押す', ok: t => (t.elevMax || 0) >= EC * ER },
   { id: 'broke', name: '故障', desc: 'エレベーターを故障させる', secret: 'エレベーターで、ごくまれに起きる何か', ok: t => (t.broke || 0) >= 1 },
   { id: 'nopush', name: '押しちゃった', desc: '押すなボタンを押す', ok: t => (t.nopush || 0) >= 1 },
-  { id: 'nopush50', name: '伝説の連打', desc: '押すなボタンを1回で50回押す', ok: t => (t.nopushMax || 0) >= 50 },
+  { id: 'nopushLegend', name: '伝説の連打', desc: '押すなボタンを1回で40回押す', ok: t => (t.nopushMax || 0) >= 40 },
   { id: 'clear', name: 'やり切った', desc: '周回モードを最後まで遊ぶ', ok: (t, g) => g.loop && g.natural },
   { id: 'goodkid', name: 'いい子', desc: '周回モードを怒られ度0%で終える', secret: '周回モードを、ある判定で終える', ok: (t, g) => g.loop && g.natural && g.res.angry === 0 },
   { id: 'legend', name: '伝説のいたずらっ子', desc: '判定「伝説のいたずらっ子」をもらう', ok: (t, g) => tierOf(g.res.angry) === 5 },
@@ -2008,10 +2011,14 @@ function update(dt) {
   tm += dt;
   const r = speed();
   if (mode === 'prompt') {
-    if (tm >= PROMPT[r] + (isBonus ? 0.7 : 0)) { mode = 'play'; tm = 0; music.start(st.bgm, RATE[r]); }
+    if (tm >= PROMPT[r] + (isBonus ? 0.5 : 0)) { mode = 'play'; tm = 0; music.start(st.bgm, RATE[r]); }
   } else if (mode === 'play') {
     st.update(dt);
-    if (tm >= PLAY[r]) { mode = 'flash'; tm = 0; st.up(null); music.stop(); sfx.flash(); }
+    if (tm >= PLAY[r]) {
+      mode = 'flash'; tm = 0; st.up(null); music.stop(); sfx.flash();
+      // 何もしなかったときは「いたずら成功！」ではなく、がまんしたことをほめる
+      doneText = st.started() ? (st.done || 'いたずら成功！') : (Math.random() < 0.5 ? 'がまんした！' : 'いい子だった！');
+    }
   } else if (mode === 'flash') {
     st.update(dt);
     if (tm >= FLASH[r]) { commit(); next(); }
@@ -2024,7 +2031,7 @@ function updateResult(dt) {
   if (shown > res.shown && !calm) { res.shown = shown; sfx.row(); }
   if (!res.stamped && rt >= res.ts) { res.stamped = true; sfx.stamp(); }
   if (res.newZ.length && !res.zShown && rt >= res.ts + 0.6) { res.zShown = true; sfx.rare(); }
-  if (rec && rt >= res.ts + (res.newZ.length ? 2.4 : 1.5)) recStop(); // 判定のハンコ（と図鑑のシール）のあと少しで録画を止める
+  if (rec && rt >= res.ts + (res.newZ.length ? 2.0 : 1.4)) recStop(); // 判定のハンコ（と図鑑のシール）のあと少しで録画を止める
 }
 
 /* ---------- 描画（HUDと結果もキャンバスに描く。録画に写すため） ---------- */
@@ -2089,7 +2096,7 @@ function draw() {
     ctx.save(); ctx.translate(W / 2, H * 0.42); ctx.rotate(0.04); ctx.scale(s, s);
     bigText(st.result(), 0, 0, Math.min(W * 0.26, 130), POP, INK, W * 0.86);
     ctx.restore();
-    bigText(st.done || 'いたずら成功！', W / 2, H * 0.42 + Math.min(W * 0.26, 130) * 0.9, Math.min(30, W * 0.075), PAPER, INK, W * 0.8);
+    bigText(doneText, W / 2, H * 0.42 + Math.min(W * 0.26, 130) * 0.9, Math.min(30, W * 0.075), PAPER, INK, W * 0.8);
     drawHud(0);
   }
 }
@@ -2200,7 +2207,7 @@ let recOn = false, rec = null, recBlob = null, recTok = 0, recFinish = null, rec
 try { recOn = canRec && localStorage.getItem('itazurush-rec') === '1'; } catch (e) {}
 // 録画用のストリームは一度だけ作って使い回す（毎回作り直すと、端末によっては2回目以降が録れない）
 // 容量を抑えるため、画面そのものではなく横 REC_W px の録画用キャンバスに縮小コピーしたものを録る
-const REC_W = 540;
+const REC_W = 480;
 let recVideo = null, recAV = null, recCv = null, recCtx = null;
 function recStart() {
   recBlob = null; recTok++; recFinish = null; recErr = '';
@@ -2217,7 +2224,7 @@ function recStart() {
       recCv.width = REC_W; recCv.height = Math.round(REC_W * H / Math.max(1, W) / 2) * 2; // 偶数にする（動画の形式の都合）
       recCtx = recCv.getContext('2d');
       recCtx.drawImage(cv, 0, 0, recCv.width, recCv.height);
-      recVideo = recCv.captureStream(30);
+      recVideo = recCv.captureStream(24);
     }
     if (!recAV && recDest) recAV = new MediaStream(recVideo.getVideoTracks().concat(recDest.stream.getAudioTracks()));
   } catch (e) { recErr = String(e && e.message || e); }
@@ -2363,7 +2370,7 @@ window.addEventListener('resize', () => { if (mode === 'result') measureBar(); }
 document.addEventListener('visibilitychange', () => { if (document.hidden) setPause(true); });
 if (document.fonts && document.fonts.load) {
   const txt = NORMAL.concat(BONUS || []).map(s => s.prompt + s.name + (s.done || '')).join('') +
-    'いたずら成功！おかわりボーナスレア出現本目判定：後始末にかかる時間損害額怒られ度円秒分時間%/0123456789.' + 'まだバレてない正座10分おやつ抜き家族会議おこづかい3か月停止伝説のいたずらっ子';
+    'いたずら成功！がまんしたいい子だったおかわりボーナスレア出現本目判定：後始末にかかる時間損害額怒られ度円秒分時間%/0123456789.' + 'まだバレてない正座10分おやつ抜き家族会議おこづかい3か月停止伝説のいたずらっ子';
   document.fonts.load(`40px ${DISPLAY}`, txt).catch(() => {});
 }
 // 自動テスト用（URLの末尾が #test のときだけ）
