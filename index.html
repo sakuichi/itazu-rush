@@ -2227,7 +2227,7 @@ try { recOn = canRec && localStorage.getItem('itazurush-rec') === '1'; } catch (
 // 容量を抑えるため、画面そのものではなく横 REC_W px の録画用キャンバスに縮小コピーしたものを録る
 const REC_W = 720;
 // 録画のコマ数。URL に ?recfps=15 などを付けると試せる（容量の比較用。8〜30）
-const REC_FPS = (() => { try { const v = parseInt(new URLSearchParams(location.search).get("recfps"), 10); return v >= 8 && v <= 30 ? v : 20; } catch (e) { return 20; } })();
+const REC_FPS = (() => { try { const v = parseInt(new URLSearchParams(location.search).get("recfps"), 10); return v >= 8 && v <= 30 ? v : 24; } catch (e) { return 24; } })();
 let recVideo = null, recAV = null, recCv = null, recCtx = null;
 function recStart() {
   recBlob = null; recTok++; recFinish = null; recErr = '';
