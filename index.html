@@ -1,4 +1,16 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>いたずラッシュ</title>
+<meta name="description" content="子どものころにやりたかったいたずらを、数秒ずつやり放題。最後に大人の現実（片付け時間・損害額・怒られ度）を突きつけられるストレス解消ネタサイト。">
+<meta property="og:type" content="website">
+<meta property="og:title" content="いたずラッシュ">
+<meta property="og:description" content="子どものころにやりたかったいたずらを、数秒ずつやり放題。最後に大人の現実が待っています。">
+<meta property="og:url" content="https://sakuichi.github.io/itazu-rush/">
+<link rel="canonical" href="https://sakuichi.github.io/itazu-rush/">
+<link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Zen+Maru+Gothic:wght@500;700;900&display=swap">
 <style>
 /* layout: 縦長1画面のゲーム台。キャンバス全面、上にHUD、タイトル・中断・結果は中央のカード */
@@ -11,8 +23,8 @@
 }
 *,*::before,*::after{box-sizing:border-box}
 [hidden]{display:none!important}
-html{height:100%;box-sizing:border-box}
-body{height:100%;background:var(--ink);color:var(--ink);font-family:var(--body);font-weight:500;overflow:hidden;overscroll-behavior:none}
+html{height:100%;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);background:var(--ink)}
+body{height:100%;margin:0;background:var(--ink);color:var(--ink);font-family:var(--body);font-weight:500;overflow:hidden;overscroll-behavior:none}
 #app{position:relative;height:100%;max-width:560px;margin-inline:auto;background:var(--pop);overflow:hidden;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
 #cv{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
 
@@ -56,6 +68,8 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--mint);outline-o
 .bill .angry .v{color:var(--hot);font-size:28px}
 #angryWord{font-family:var(--display);font-size:22px;text-align:center;transform:rotate(-2deg)}
 </style>
+</head>
+<body>
 
 <div id="app">
   <canvas id="cv" aria-label="ゲーム画面"></canvas>
@@ -668,3 +682,5 @@ if (document.fonts && document.fonts.load) {
 }
 })();
 </script>
+</body>
+</html>
