@@ -108,7 +108,7 @@ button.mini:active{transform:translate(2px,2px)}
         <label class="opt" for="recChk" id="recOpt" hidden><input type="checkbox" id="recChk">録画する</label>
       </div>
       <button class="zukanbtn" id="zukanBtn" type="button">いたずら図鑑 <b id="zukanCount">0/0</b></button>
-      <p class="small" id="recNote" hidden>録画すると、プレイから結果までを音つきの動画で保存できます（音を出さない設定でも、動画には音が入ります）。</p>
+      <p class="small" id="recNote" hidden>録画すると、プレイから結果までを音つきの動画で保存できます（音を出さない設定でも、動画には音が入ります）。無限モードでは、Xに投稿できる長さに収めるため、最後の70〜140秒だけを残します。</p>
       <p class="small">周回ごとに速くなります。失敗はありません。右上の一時停止ボタンでいつでも中断できます。</p>
       <p class="small">※いたずらをすすめるものではありません。画面の中だけで楽しんでください。</p>
       <p class="small">Amazonのアソシエイトとして、当サイトは適格販売により収入を得ています。</p>
@@ -2215,13 +2215,14 @@ function frame(ts) {
   const dt = Math.min(0.05, (ts - last) / 1000 || 0); last = ts;
   update(dt); draw();
   if (rec && recCv) recCtx.drawImage(cv, 0, 0, recCv.width, recCv.height); // 録画用の小さいキャンバスへ写す
+  recTick(dt);
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
 
 /* ---------- 録画（オンのときだけ。映像はキャンバス、音は録画用の出力） ---------- */
 const canRec = !!(cv.captureStream && window.MediaRecorder);
-let recOn = false, rec = null, recBlob = null, recTok = 0, recFinish = null, recErr = '';
+let recOn = false, rec = null, recBlob = null, recTok = 0, recErr = '';
 try { recOn = canRec && localStorage.getItem('itazurush-rec') !== '0'; } catch (e) { recOn = canRec; } // はじめはオン。切り替えたら覚えておく
 // 録画用のストリームは一度だけ作って使い回す（毎回作り直すと、端末によっては2回目以降が録れない）
 // 容量を抑えるため、画面そのものではなく横 REC_W px の録画用キャンバスに縮小コピーしたものを録る
@@ -2229,50 +2230,78 @@ const REC_W = 720;
 // 録画のコマ数。URL に ?recfps=15 などを付けると試せる（容量の比較用。8〜30）
 const REC_FPS = (() => { try { const v = parseInt(new URLSearchParams(location.search).get("recfps"), 10); return v >= 8 && v <= 30 ? v : 24; } catch (e) { return 24; } })();
 let recVideo = null, recAV = null, recCv = null, recCtx = null;
-function recStart() {
-  recBlob = null; recTok++; recFinish = null; recErr = '';
-  if (!recOn || !canRec) return;
-  const types = ['video/mp4;codecs="avc1.42E01E,mp4a.40.2"', 'video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4;codecs=avc1,mp4a.40.2', 'video/mp4',
-    'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
-  let mime = '', r = null, done = false;
-  const tok = recTok, chunks = [];
-  try { mime = types.find(t => MediaRecorder.isTypeSupported(t)) || ''; } catch (e) {}
-  const opt = mime ? { mimeType: mime, videoBitsPerSecond: 1.8e6, audioBitsPerSecond: 128000 } : undefined;
-  try {
-    if (!recVideo) {
-      recCv = document.createElement('canvas');
-      recCv.width = REC_W; recCv.height = Math.round(REC_W * H / Math.max(1, W) / 2) * 2; // 偶数にする（動画の形式の都合）
-      recCtx = recCv.getContext('2d');
-      recCtx.drawImage(cv, 0, 0, recCv.width, recCv.height);
-      recVideo = recCv.captureStream(REC_FPS);
-    }
-    if (!recAV && recDest) recAV = new MediaStream(recVideo.getVideoTracks().concat(recDest.stream.getAudioTracks()));
-  } catch (e) { recErr = String(e && e.message || e); }
-  // 音つきで始められなければ、映像だけで録る
-  for (const c of [recAV, recVideo]) {
+// 録画はブラウザの仕組み上、古い部分だけを後から捨てられない。そこで無限モードでは REC_STEP 秒ごとに録画をずらして足し、
+// REC_MAX 秒より古くなった録画は捨てる。終わったら、残っているうちでいちばん古い録画を使う（＝最後の70〜140秒。X の無料ユーザーの上限に収まる）
+// 周回モードは全体で約136秒なので、1本だけで全部録る
+const REC_MAX = 140, REC_STEP = 70;
+function recStream() { // 録画用のキャンバスとストリームを（まだなければ）作る
+  if (!recVideo) {
+    recCv = document.createElement('canvas');
+    recCv.width = REC_W; recCv.height = Math.round(REC_W * H / Math.max(1, W) / 2) * 2; // 偶数にする（動画の形式の都合）
+    recCtx = recCv.getContext('2d');
+    recCtx.drawImage(cv, 0, 0, recCv.width, recCv.height);
+    recVideo = recCv.captureStream(REC_FPS);
+  }
+  if (!recAV && recDest) recAV = new MediaStream(recVideo.getVideoTracks().concat(recDest.stream.getAudioTracks()));
+}
+function recNew(sess) { // 録画を1本始める
+  const opt = sess.mime ? { mimeType: sess.mime, videoBitsPerSecond: 1.8e6, audioBitsPerSecond: 128000 } : undefined;
+  let r = null;
+  for (const c of [recAV, recVideo]) { // 音つきで始められなければ、映像だけで録る
     if (!c || r) continue;
     try { r = new MediaRecorder(c, opt); r.start(1000); } catch (e) { recErr = String(e && e.message || e); r = null; }
   }
-  if (!r) return;
-  const fin = () => {
-    if (done || tok !== recTok) return; done = true;
-    if (!chunks.length) { $('recHint').textContent = 'この端末では録画データを作れませんでした。' + (recErr ? '（' + recErr + '）' : ''); return; }
-    recBlob = new Blob(chunks, { type: (r.mimeType || mime || 'video/webm').split(';')[0] });
-    $('saveVid').hidden = false; $('recHint').textContent = '動画の準備ができました。';
-  };
-  r.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
-  r.onstop = fin; r.onerror = e => { recErr = String(e && e.error && e.error.message || '録画エラー'); };
-  recFinish = fin; rec = r;
+  if (!r) return null;
+  const part = { r, chunks: [], t0: sess.t, mime: r.mimeType || sess.mime };
+  r.ondataavailable = e => { if (e.data && e.data.size) part.chunks.push(e.data); };
+  r.onerror = e => { recErr = String(e && e.error && e.error.message || '録画エラー'); };
+  sess.parts.push(part);
+  return part;
+}
+function recStart() {
+  recBlob = null; recTok++; recErr = ''; rec = null;
+  if (!recOn || !canRec) return;
+  const types = ['video/mp4;codecs="avc1.42E01E,mp4a.40.2"', 'video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4;codecs=avc1,mp4a.40.2', 'video/mp4',
+    'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
+  const sess = { tok: recTok, t: 0, last: 0, parts: [], mime: '', multi: gameMode !== 'loop', paused: false };
+  try { sess.mime = types.find(t => MediaRecorder.isTypeSupported(t)) || ''; } catch (e) {}
+  try { recStream(); } catch (e) { recErr = String(e && e.message || e); }
+  if (recNew(sess)) rec = sess;
+}
+function recTick(dt) { // 毎フレーム。録った時間を数え、無限モードでは録画をずらして足し、古くなったものを捨てる
+  const ss = rec; if (!ss || ss.paused) return;
+  ss.t += dt;
+  if (!ss.multi) return;
+  if (ss.t - ss.last >= REC_STEP) { ss.last = ss.t; recNew(ss); }
+  while (ss.parts.length > 1 && ss.t - ss.parts[0].t0 > REC_MAX) { const p = ss.parts.shift(); try { p.r.stop(); } catch (e) {} }
 }
 function recStop() {
-  const r = rec, fin = recFinish; rec = null; if (!r) return;
-  if (r.state !== 'inactive') { try { r.stop(); } catch (e) {} }
-  if (fin) setTimeout(fin, 2000); // 停止の通知が来ない端末向けの保険
+  const ss = rec; rec = null; if (!ss) return;
+  const keep = ss.parts[0]; // 残っているうちでいちばん古い録画（最大 REC_MAX 秒）
+  for (const p of ss.parts.slice(1)) { try { p.r.stop(); } catch (e) {} }
+  if (!keep) return;
+  const len = Math.round(ss.t - keep.t0);
+  let done = false;
+  const fin = () => {
+    if (done || ss.tok !== recTok) return; done = true;
+    if (!keep.chunks.length) { $('recHint').textContent = 'この端末では録画データを作れませんでした。' + (recErr ? '（' + recErr + '）' : ''); return; }
+    recBlob = new Blob(keep.chunks, { type: (keep.mime || 'video/webm').split(';')[0] });
+    $('saveVid').hidden = false;
+    $('recHint').textContent = ss.multi && ss.t > REC_MAX ? '動画の準備ができました（無限モードなので、最後の' + len + '秒）。' : '動画の準備ができました。';
+  };
+  keep.r.onstop = fin;
+  if (keep.r.state !== 'inactive') { try { keep.r.stop(); } catch (e) { fin(); } } else fin();
+  setTimeout(fin, 2000); // 停止の通知が来ない端末向けの保険
 }
-function recCancel() { recTok++; recBlob = null; recStop(); }
+function recCancel() {
+  recTok++; recBlob = null;
+  const ss = rec; rec = null;
+  if (ss) for (const p of ss.parts) { try { p.r.stop(); } catch (e) {} }
+}
 function recPause(v) {
-  if (!rec) return;
-  try { if (v && rec.state === 'recording') rec.pause(); else if (!v && rec.state === 'paused') rec.resume(); } catch (e) {}
+  const ss = rec; if (!ss) return;
+  ss.paused = v;
+  for (const p of ss.parts) { try { if (v && p.r.state === 'recording') p.r.pause(); else if (!v && p.r.state === 'paused') p.r.resume(); } catch (e) {} }
 }
 
 /* ---------- シェア・買い直し ---------- */
