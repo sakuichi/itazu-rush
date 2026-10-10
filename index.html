@@ -1849,7 +1849,7 @@ const N = NORMAL.length;
 const ROUNDS = 2;          // 周回モードの周回数（全ステージが揃ってから調整）
 const BONUS_RATE = 0.05;   // 無限モードで、1周目のあと各ステージの後に押すなボタンが割り込む確率
 // 周回ごと。4周目以降は最後の値。周回モード全体の録画が X の無料ユーザーの上限（140秒）に収まるよう、約136秒にしている
-const PLAY = [5, 4.5, 4], PROMPT = [0.8, 0.7, 0.65], FLASH = [0.8, 0.7, 0.65], RATE = [1, 1.5, 1.6]; // RATE: BGMのテンポ倍率。周回が進むとはっきり速くして焦らせる
+const PLAY = [5, 4.5, 4], PROMPT = [0.8, 0.7, 0.65], FLASH = [0.8, 0.7, 0.65], RATE = [1, 1.4, 1.5]; // RATE: BGMのテンポ倍率。周回が進むとはっきり速くして焦らせる
 const SITE = 'https://sakuichi.github.io/itazu-rush/';
 const add = (t, k, v) => { t[k] = (t[k] || 0) + v; };
 const mx = (t, k, v) => { t[k] = Math.max(t[k] || 0, v); }; // 1回のステージでの最高（図鑑の判定用）
@@ -2222,7 +2222,7 @@ requestAnimationFrame(frame);
 /* ---------- 録画（オンのときだけ。映像はキャンバス、音は録画用の出力） ---------- */
 const canRec = !!(cv.captureStream && window.MediaRecorder);
 let recOn = false, rec = null, recBlob = null, recTok = 0, recFinish = null, recErr = '';
-try { recOn = canRec && localStorage.getItem('itazurush-rec') === '1'; } catch (e) {}
+try { recOn = canRec && localStorage.getItem('itazurush-rec') !== '0'; } catch (e) { recOn = canRec; } // はじめはオン。切り替えたら覚えておく
 // 録画用のストリームは一度だけ作って使い回す（毎回作り直すと、端末によっては2回目以降が録れない）
 // 容量を抑えるため、画面そのものではなく横 REC_W px の録画用キャンバスに縮小コピーしたものを録る
 const REC_W = 720;
