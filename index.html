@@ -79,7 +79,7 @@ button.mini:active{transform:translate(2px,2px)}
   <canvas id="cv" aria-label="ゲーム画面"></canvas>
 
   <div id="hud" hidden>
-    <button id="pauseBtn" type="button" aria-label="中断する">II</button>
+    <button id="pauseBtn" type="button" aria-label="中断する"><svg width="16" height="18" viewBox="0 0 16 18" aria-hidden="true"><rect x="1" y="1" width="5" height="16" rx="1.5" fill="currentColor"/><rect x="10" y="1" width="5" height="16" rx="1.5" fill="currentColor"/></svg></button>
   </div>
 
   <section class="panel" id="title">
@@ -97,7 +97,7 @@ button.mini:active{transform:translate(2px,2px)}
         <label class="opt" for="recChk" id="recOpt" hidden><input type="checkbox" id="recChk">録画する</label>
       </div>
       <p class="small" id="recNote" hidden>録画すると、プレイから結果までを音つきの動画で保存できます（音を出さない設定でも、動画には音が入ります）。</p>
-      <p class="small">周回ごとに速くなります。失敗はありません。右上の II でいつでも中断できます。</p>
+      <p class="small">周回ごとに速くなります。失敗はありません。右上の一時停止ボタンでいつでも中断できます。</p>
       <p class="small">※いたずらをすすめるものではありません。画面の中だけで楽しんでください。</p>
     </div>
   </section>
@@ -712,7 +712,8 @@ function tapHint(x, y, t, rate) {
 
 /* ---------- ステージ4: 歯みがき粉 ---------- */
 const TUBE_CM = 350; // 1本（120g）をしぼり切ると、およそこの長さ
-const PASTE_MAX = 100; // cm/秒。これより速くは出ない
+const PASTE_MAX = 150; // cm/秒。これより速くは出ない
+const PASTE_SLIP = 1300; // px/秒。これより速くなぞると指がすべる
 const paste = {
   key: 'paste', name: '歯みがき粉', prompt: 'しぼれ！', hint: '上から下へ ゆっくりなぞる', bg: '#bfe6ef',
   bgm: song(138, [ // むにゅっとしたファンク
@@ -746,7 +747,7 @@ const paste = {
     let d = 0;
     if (scoring() && px > 0) {
       let want = px / s * 0.5; // なぞった1pxで0.5cm
-      if (this.speed / s > 700) { want *= 0.15; if (this.slip <= 0) sfx.slip(); this.slip = 0.6; } // 速すぎると指がすべる
+      if (this.speed / s > PASTE_SLIP) { want *= 0.15; if (this.slip <= 0) sfx.slip(); this.slip = 0.6; } // 速すぎると指がすべる
       d = Math.min(want, this.room); this.room -= d;
     }
     if (d > 0) this.flow += (d / Math.max(dt, 1e-3) - this.flow) * Math.min(1, dt * 14);
