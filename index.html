@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>いたずラッシュ</title>
-<meta name="description" content="子どものころにやりたかったいたずらを、数秒ずつやり放題。最後に大人の現実（片付け時間・損害額・怒られ度）を突きつけられるストレス解消ネタサイト。">
+<meta name="description" content="子どものころにやりたかったいたずらを、数秒ずつやり放題。最後に大人の現実（後始末の時間・損害額・怒られ度）を突きつけられるストレス解消ネタサイト。">
 <meta property="og:type" content="website">
 <meta property="og:title" content="いたずラッシュ">
 <meta property="og:description" content="子どものころにやりたかったいたずらを、数秒ずつやり放題。最後に大人の現実が待っています。">
@@ -13,7 +13,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Zen+Maru+Gothic:wght@500;700;900&display=swap">
 <style>
-/* layout: 縦長1画面のゲーム台。キャンバス全面、上にHUD、タイトル・中断・結果は中央のカード */
+/* layout: 縦長1画面のゲーム台。キャンバス全面（HUDと結果もキャンバスに描く＝録画に写る）、操作用のボタンだけDOM */
 :root{
   --ink:#231b2e; --paper:#fffdf5; --pop:#ffd23f; --pop-deep:#ffb81f;
   --hot:#ff5a4e; --mint:#2fb5a3; --mute:#6b6178;
@@ -28,45 +28,43 @@ body{height:100%;margin:0;background:var(--ink);color:var(--ink);font-family:var
 #app{position:relative;height:100%;max-width:560px;margin-inline:auto;background:var(--pop);overflow:hidden;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
 #cv{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
 
-#hud{position:absolute;inset:0 0 auto 0;display:flex;align-items:center;gap:10px;padding:10px 16px;pointer-events:none}
-#stg{font-family:var(--display);font-size:15px;color:var(--paper);background:var(--ink);padding:4px 10px;border-radius:999px;font-variant-numeric:tabular-nums;white-space:nowrap}
-#barwrap{flex:1;min-width:0;height:14px;background:var(--ink);border:3px solid var(--ink);border-radius:999px;overflow:hidden}
-#bar{height:100%;width:100%;background:var(--hot);border-radius:999px;transform-origin:left center}
+#hud{position:absolute;top:10px;right:16px;pointer-events:none}
 #pauseBtn{pointer-events:auto;width:44px;height:44px;border-radius:50%;border:3px solid var(--ink);background:var(--paper);color:var(--ink);font-family:var(--display);font-size:16px;cursor:pointer;display:grid;place-items:center;padding:0}
 
 .panel{position:absolute;inset:0;display:flex;padding:16px 20px 24px 16px;overflow:auto}
-#pause{background:rgba(35,27,46,.62)}
+#pause,#shop{background:rgba(35,27,46,.62)}
 .card{margin:auto;width:100%;max-width:400px;background:var(--paper);border:4px solid var(--ink);border-radius:6px;box-shadow:8px 8px 0 var(--ink);padding:22px 20px;display:flex;flex-direction:column;gap:16px}
 .tag{align-self:flex-start;font-size:12px;font-weight:900;letter-spacing:.08em;background:var(--ink);color:var(--pop);padding:3px 9px;border-radius:3px}
 h1{font-family:var(--display);font-weight:400;font-size:clamp(34px,11vw,48px);line-height:1.05;margin:0;text-wrap:balance;transform:rotate(-2deg);transform-origin:left center}
 h1 span{color:var(--hot)}
-h2{font-family:var(--display);font-weight:400;font-size:26px;margin:0;line-height:1.2}
+h2{font-family:var(--display);font-weight:400;font-size:24px;margin:0;line-height:1.25}
 p{margin:0;line-height:1.7;font-size:15px}
 .lead{font-weight:700}
-.stages{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
-.stages li{display:flex;justify-content:space-between;gap:12px;align-items:baseline;border-bottom:2px dashed rgba(35,27,46,.25);padding-bottom:6px;font-size:15px}
-.stages b{font-weight:900}
-.stages span{color:var(--mute);font-size:13px;text-align:right}
+.chips{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:6px}
+.chips li{font-size:13px;font-weight:700;line-height:1.5;border:2px solid var(--ink);border-radius:999px;padding:1px 10px;background:#fff}
+.chips li.secret{background:var(--ink);color:var(--pop)}
 .btns{display:flex;flex-direction:column;gap:10px}
-button.big{font-family:var(--display);font-size:20px;padding:13px 16px;border:4px solid var(--ink);border-radius:6px;background:var(--hot);color:var(--paper);cursor:pointer;box-shadow:4px 4px 0 var(--ink)}
+button.big{font-family:var(--display);font-size:20px;line-height:1.3;padding:12px 16px;border:4px solid var(--ink);border-radius:6px;background:var(--hot);color:var(--paper);cursor:pointer;box-shadow:4px 4px 0 var(--ink)}
 button.big.sub{background:var(--paper);color:var(--ink);font-size:16px;padding:10px 16px}
+button.big small{display:block;font-family:var(--body);font-size:12px;font-weight:700;opacity:.9}
 button.big:active{transform:translate(3px,3px);box-shadow:1px 1px 0 var(--ink)}
-button:focus-visible,input:focus-visible{outline:3px solid var(--mint);outline-offset:3px}
+button:focus-visible,input:focus-visible,a:focus-visible{outline:3px solid var(--mint);outline-offset:3px}
+.opts{display:flex;flex-wrap:wrap;gap:8px 20px}
 .opt{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:700;cursor:pointer}
 .opt input{width:20px;height:20px;accent-color:var(--hot)}
 .small{font-size:12px;color:var(--mute);line-height:1.6}
+.small:empty{display:none}
 
-.haul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;font-variant-numeric:tabular-nums}
-.haul li{display:grid;grid-template-columns:1fr auto;gap:2px 12px;align-items:baseline;border-bottom:2px dashed rgba(35,27,46,.25);padding-bottom:6px}
-.haul .k{font-weight:700;font-size:14px}
-.haul .v{font-family:var(--display);font-size:20px;text-align:right}
-.haul .n{grid-column:1/-1;font-size:12px;color:var(--mute)}
-.bill{background:var(--ink);color:var(--paper);border-radius:4px;padding:14px;display:flex;flex-direction:column;gap:8px;font-variant-numeric:tabular-nums}
-.bill div{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
-.bill .k{font-size:13px;font-weight:700;color:var(--pop)}
-.bill .v{font-family:var(--display);font-size:22px;text-align:right}
-.bill .angry .v{color:var(--hot);font-size:28px}
-#angryWord{font-family:var(--display);font-size:22px;text-align:center;transform:rotate(-2deg)}
+/* 結果：中身はキャンバスに描き、下にボタンの帯だけ出す */
+.panel.bottom{align-items:flex-end;pointer-events:none;padding:12px 16px 14px}
+.resbar{pointer-events:auto;width:100%;max-width:420px;margin:0 auto;background:var(--paper);border:4px solid var(--ink);border-radius:6px;box-shadow:6px 6px 0 var(--ink);padding:10px;display:flex;flex-direction:column;gap:8px}
+.resbar button.big{font-size:18px;padding:10px 12px}
+.minirow{display:flex;gap:6px}
+button.mini{flex:1 1 0;min-width:0;font-family:var(--body);font-weight:900;font-size:13px;line-height:1.3;padding:8px 2px;border:3px solid var(--ink);border-radius:6px;background:var(--paper);color:var(--ink);cursor:pointer;white-space:nowrap}
+button.mini:active{transform:translate(2px,2px)}
+.shoplist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.shoplist a{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 12px;border:3px solid var(--ink);border-radius:6px;background:#fff;color:var(--ink);text-decoration:none;font-weight:700;font-size:14px}
+.shoplist small{color:var(--mute);font-size:12px;white-space:nowrap}
 </style>
 </head>
 <body>
@@ -75,8 +73,6 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--mint);outline-o
   <canvas id="cv" aria-label="ゲーム画面"></canvas>
 
   <div id="hud" hidden>
-    <div id="stg">1/9</div>
-    <div id="barwrap"><div id="bar"></div></div>
     <button id="pauseBtn" type="button" aria-label="中断する">II</button>
   </div>
 
@@ -85,16 +81,17 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--mint);outline-o
       <div class="tag">試作版</div>
       <h1>いたず<br><span>ラッシュ</span></h1>
       <p class="lead">子どものころ、やりたかったやつ。<br>後片付けのことは考えなくていい。</p>
-      <ul class="stages">
-        <li><b>ティッシュ</b><span>左右に交互にスワイプ</span></li>
-        <li><b>トイレットペーパー</b><span>下に何度もスワイプ</span></li>
-        <li><b>障子</b><span>タップ、またはなぞる</span></li>
-      </ul>
+      <ul class="chips" id="chips" aria-label="出てくるいたずら"></ul>
       <div class="btns">
-        <button class="big" id="startBtn" type="button">はじめる</button>
-        <label class="opt" for="soundChk"><input type="checkbox" id="soundChk" checked>音を出す</label>
+        <button class="big" id="startBtn" type="button">はじめる<small id="startSub"></small></button>
+        <button class="big sub" id="endlessBtn" type="button">無限モード<small>「やめて結果を見る」まで続く</small></button>
       </div>
-      <p class="small">3ステージを3周。周回ごとに速くなります。失敗はありません。右上の II でいつでも中断できます。</p>
+      <div class="opts">
+        <label class="opt" for="soundChk"><input type="checkbox" id="soundChk" checked>音を出す</label>
+        <label class="opt" for="recChk" id="recOpt" hidden><input type="checkbox" id="recChk">録画する</label>
+      </div>
+      <p class="small" id="recNote" hidden>録画すると、プレイから結果までを音つきの動画で保存できます（音を出さない設定でも、動画には音が入ります）。</p>
+      <p class="small">周回ごとに速くなります。失敗はありません。右上の II でいつでも中断できます。</p>
       <p class="small">※いたずらをすすめるものではありません。画面の中だけで楽しんでください。</p>
     </div>
   </section>
@@ -107,28 +104,30 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--mint);outline-o
         <button class="big sub" id="quitBtn" type="button">ここでやめて結果を見る</button>
         <button class="big sub" id="homeBtn" type="button">タイトルにもどる</button>
       </div>
+      <label class="opt" for="soundChk2"><input type="checkbox" id="soundChk2" checked>音を出す</label>
     </div>
   </section>
 
-  <section class="panel" id="result" hidden>
+  <section class="panel bottom" id="result" hidden>
+    <div class="resbar" id="resbar">
+      <button class="big" id="againBtn" type="button">もう一回いたずらする</button>
+      <div class="minirow">
+        <button class="mini" id="saveVid" type="button" hidden>動画を保存</button>
+        <button class="mini" id="xpost" type="button">Xでポスト</button>
+        <button class="mini" id="shopBtn" type="button">買い直す</button>
+        <button class="mini" id="home2Btn" type="button">タイトル</button>
+      </div>
+      <p class="small" id="recHint" role="status"></p>
+    </div>
+  </section>
+
+  <section class="panel" id="shop" hidden>
     <div class="card">
-      <div class="tag">本日のいたずら</div>
-      <ul class="haul">
-        <li><span class="k">ティッシュ</span><span class="v" id="rTissue">0枚</span><span class="n" id="rTissueN"></span></li>
-        <li><span class="k">トイレットペーパー</span><span class="v" id="rTp">0m</span><span class="n" id="rTpN"></span></li>
-        <li><span class="k">障子</span><span class="v" id="rShoji">0穴</span><span class="n" id="rShojiN"></span></li>
-      </ul>
-      <div class="bill">
-        <div><span class="k">片付けにかかる時間</span><span class="v" id="rTime">0分</span></div>
-        <div><span class="k">損害額</span><span class="v" id="rYen">0円</span></div>
-        <div class="angry"><span class="k">怒られ度</span><span class="v" id="rAngry">0%</span></div>
-      </div>
-      <div id="angryWord"></div>
-      <div class="btns">
-        <button class="big" id="againBtn" type="button">もう一回いたずらする</button>
-        <button class="big sub" id="home2Btn" type="button">タイトルにもどる</button>
-      </div>
-      <p class="small">時間と金額はざっくりした目安です。実際にやると本当に怒られます。</p>
+      <div class="tag">PR</div>
+      <h2>いたずらした分を<br>買い直す</h2>
+      <ul class="shoplist" id="shopList"></ul>
+      <p class="small">Amazonのアソシエイトとして、当サイトは適格販売により収入を得ています。</p>
+      <button class="big sub" id="shopClose" type="button">とじる</button>
     </div>
   </section>
 </div>
@@ -190,31 +189,44 @@ function finger(x, y, a) {
 }
 
 /* ---------- 音 ---------- */
-let AC = null, noiseBuf = null, soundOn = true;
+/* 経路: 効果音・BGM → bus →（スピーカー用ゲイン → スピーカー）と（録画用の出力）。
+   音を出さない設定はスピーカー用ゲインを0にするだけで、音そのものは作り続ける（録画には入る） */
+let AC = null, noiseBuf = null, bus = null, spk = null, bgmBus = null, recDest = null, soundOn = true;
+try { soundOn = localStorage.getItem('itazurush-sound') !== '0'; } catch (e) {}
 function initAudio() {
-  if (AC) { if (AC.state === 'suspended') AC.resume(); return; }
+  if (AC) { if (AC.state !== 'running') AC.resume(); return; } // iOSは共有シートなどの後に "interrupted" になる
   try {
     AC = new (window.AudioContext || window.webkitAudioContext)();
     noiseBuf = AC.createBuffer(1, Math.floor(AC.sampleRate * 0.5), AC.sampleRate);
     const d = noiseBuf.getChannelData(0);
     for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    bus = AC.createGain(); bus.gain.value = 0.8;
+    spk = AC.createGain(); spk.gain.value = soundOn ? 1 : 0;
+    bus.connect(spk); spk.connect(AC.destination);
+    bgmBus = AC.createGain(); bgmBus.gain.value = 0.55; bgmBus.connect(bus);
+    try {
+      recDest = AC.createMediaStreamDestination(); bus.connect(recDest);
+      // 録画用の音声を途切れさせないための、聞こえない音（スピーカーには流さない）。無音区間で音声データが抜けると動画の音がズレる
+      const ka = AC.createOscillator(), kg = AC.createGain();
+      ka.frequency.value = 20; kg.gain.value = 0.0005; ka.connect(kg); kg.connect(recDest); ka.start();
+    } catch (e) { recDest = null; }
   } catch (e) { AC = null; }
 }
-function noise(dur, freq, q, vol, type) {
-  if (!AC || !soundOn) return;
-  const t = AC.currentTime, s = AC.createBufferSource(), f = AC.createBiquadFilter(), g = AC.createGain();
+function noise(dur, freq, q, vol, type, delay) {
+  if (!AC) return;
+  const t = AC.currentTime + (delay || 0), s = AC.createBufferSource(), f = AC.createBiquadFilter(), g = AC.createGain();
   s.buffer = noiseBuf; f.type = type || 'bandpass'; f.frequency.value = freq; f.Q.value = q;
   g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-  s.connect(f); f.connect(g); g.connect(AC.destination);
+  s.connect(f); f.connect(g); g.connect(bus);
   s.start(t, Math.random() * 0.3); s.stop(t + dur + 0.02);
 }
 function tone(f0, f1, dur, vol, type, delay) {
-  if (!AC || !soundOn) return;
+  if (!AC) return;
   const t = AC.currentTime + (delay || 0), o = AC.createOscillator(), g = AC.createGain();
   o.type = type || 'square'; o.frequency.setValueAtTime(f0, t);
   if (f1 !== f0) o.frequency.exponentialRampToValueAtTime(f1, t + dur);
   g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-  o.connect(g); g.connect(AC.destination); o.start(t); o.stop(t + dur + 0.02);
+  o.connect(g); g.connect(bus); o.start(t); o.stop(t + dur + 0.02);
 }
 const sfx = {
   tissue() { noise(0.13, rnd(2600, 3800), 0.7, 0.28); },
@@ -224,16 +236,117 @@ const sfx = {
   refill() { tone(660, 990, 0.12, 0.1); },
   prompt() { tone(660, 660, 0.08, 0.1); tone(880, 880, 0.12, 0.1, 'square', 0.09); },
   flash() { tone(523, 523, 0.09, 0.1); tone(784, 784, 0.16, 0.1, 'square', 0.09); },
-  final() { [523, 659, 784, 1047].forEach((f, i) => tone(f, f, 0.16, 0.1, 'square', i * 0.11)); }
+  final() { [523, 659, 784, 1047].forEach((f, i) => tone(f, f, 0.16, 0.1, 'square', i * 0.11)); },
+  rare() { [784, 988, 1175, 1568, 1976].forEach((f, i) => tone(f, f, 0.1, 0.08, 'square', i * 0.06)); noise(0.4, 6000, 1, 0.08, 'highpass', 0.3); },
+  row() { tone(1200, 1200, 0.04, 0.05, 'square'); },
+  stamp() { tone(170, 55, 0.22, 0.4, 'sine'); noise(0.14, 500, 0.7, 0.45, 'lowpass'); }
+};
+
+/* ---------- BGM（その場で合成する、ステージごとの2小節ループ） ---------- */
+const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
+// 音符列: 16分音符1つにつき1語。数字=MIDIノート番号、'-'=前の音をのばす、'.'=休み
+function seq(str) {
+  const tk = str.trim().split(/\s+/), out = new Array(tk.length).fill(null);
+  let last = -1;
+  tk.forEach((s, i) => {
+    if (s === '-') { if (last >= 0) out[last][1]++; }
+    else if (s === '.') last = -1;
+    else { out[i] = [+s, 1]; last = i; }
+  });
+  return out;
+}
+function song(bpm, tracks, drums, pad) {
+  const t = tracks.map(([v, vol, str]) => ({ v, vol, seq: seq(str) }));
+  return { bpm, tracks: t, drums, pad, len: t[0].seq.length };
+}
+function voice(kind, m, t, dur, vol, out) {
+  const f = mtof(m);
+  const osc = (type, freq, mul, d, a) => {
+    const o = AC.createOscillator(), g = AC.createGain();
+    o.type = type; o.frequency.setValueAtTime(freq, t);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol * mul, t + (a || 0.006));
+    g.gain.exponentialRampToValueAtTime(0.0008, t + d);
+    o.connect(g); g.connect(out); o.start(t); o.stop(t + d + 0.03);
+    return o;
+  };
+  switch (kind) {
+    case 'pluck': osc('triangle', f, 1, Math.max(0.28, dur)); osc('sine', f * 2, 0.45, 0.12); break; // 琴っぽい
+    case 'bell': osc('sine', f, 1, 0.7, 0.003); osc('sine', f * 2.76, 0.35, 0.3, 0.003); break;
+    case 'ep': osc('sine', f, 1, Math.max(0.45, dur * 1.1), 0.012); osc('triangle', f * 2, 0.16, 0.25, 0.012); break;
+    case 'bub': { const o = osc('sine', f, 1, Math.min(0.16, dur)); o.frequency.setValueAtTime(f * 0.6, t); o.frequency.exponentialRampToValueAtTime(f, t + 0.05); break; }
+    case 'wob': { const o = osc('sine', f, 1, dur * 0.95); o.frequency.setValueAtTime(f * 1.5, t); o.frequency.exponentialRampToValueAtTime(f, t + 0.07); osc('triangle', f, 0.4, dur * 0.9); break; }
+    default: osc(kind, f, 1, dur * 0.92);
+  }
+}
+function drum(c, t, out) {
+  const n = (dur, freq, q, vol, type) => {
+    const s = AC.createBufferSource(), fl = AC.createBiquadFilter(), g = AC.createGain();
+    s.buffer = noiseBuf; fl.type = type || 'bandpass'; fl.frequency.value = freq; fl.Q.value = q;
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    s.connect(fl); fl.connect(g); g.connect(out); s.start(t, Math.random() * 0.3); s.stop(t + dur + 0.02);
+  };
+  const k = (f0, f1, dur, vol) => {
+    const o = AC.createOscillator(), g = AC.createGain();
+    o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.connect(g); g.connect(out); o.start(t); o.stop(t + dur + 0.02);
+  };
+  switch (c) {
+    case 'k': k(150, 45, 0.12, 0.5); break;                              // キック
+    case 's': n(0.12, 1800, 0.8, 0.22); k(220, 160, 0.06, 0.12); break; // スネア
+    case 'h': n(0.035, 8000, 1, 0.08, 'highpass'); break;               // ハイハット
+    case 'o': n(0.16, 7000, 1, 0.07, 'highpass'); break;                // オープンハイハット
+    case 'c': n(0.08, 1400, 1.2, 0.25); break;                          // クラップ
+    case 't': k(180, 70, 0.22, 0.5); n(0.08, 500, 1, 0.12, 'lowpass'); break; // 太鼓
+    case 'r': n(0.03, 2500, 4, 0.25); break;                            // リムショット
+    case 'j': n(0.05, 9500, 2, 0.06, 'highpass'); n(0.04, 7000, 3, 0.04); break; // 鈴
+  }
+}
+const music = {
+  song: null, out: null, step: 0, next: 0, dur: 0.1, timer: 0,
+  start(sg, rate) {
+    this.stop();
+    if (!AC || !sg) return;
+    this.song = sg; this.dur = 60 / (sg.bpm * rate) / 4; this.step = 0; this.next = AC.currentTime + 0.05;
+    this.out = AC.createGain(); this.out.gain.value = 1; this.out.connect(bgmBus);
+    this.timer = setInterval(() => this.pump(), 25); this.pump();
+  },
+  stop() {
+    clearInterval(this.timer); this.timer = 0; this.song = null;
+    if (this.out && AC) {
+      const o = this.out; o.gain.setTargetAtTime(0, AC.currentTime, 0.03);
+      setTimeout(() => { try { o.disconnect(); } catch (e) {} }, 500);
+    }
+    this.out = null;
+  },
+  pump() {
+    const s = this.song; if (!s || !AC) return;
+    if (this.next < AC.currentTime - 0.2) this.next = AC.currentTime + 0.02; // タブの裏などで遅れたら追いつかせない
+    while (this.next < AC.currentTime + 0.12) {
+      const i = this.step % s.len, t = this.next, d = this.dur;
+      for (const tr of s.tracks) { const ev = tr.seq[i]; if (ev) voice(tr.v, ev[0], t, ev[1] * d, tr.vol, this.out); }
+      if (s.pad && i % s.pad.every === 0) {
+        for (const m of s.pad.chords[(i / s.pad.every) % s.pad.chords.length]) voice(s.pad.v, m, t, s.pad.every * d, s.pad.vol, this.out);
+      }
+      for (const dl of s.drums) { const c = dl[i % dl.length]; if (c !== '.') drum(c, t, this.out); }
+      this.step++; this.next += d;
+    }
+  }
 };
 
 /* ---------- ステージ1: ティッシュ ---------- */
 const tissue = {
-  prompt: '出せ！', hint: '左右に交互にスワイプ', bg: '#ff9e8a',
+  key: 'tissue', name: 'ティッシュ', prompt: '出せ！', hint: '左右に交互にスワイプ', bg: '#ff9e8a',
+  bgm: song(152, [ // 軽快
+    ['square', 0.05, '72 . 76 . 79 . 76 . 72 . 74 . 76 - - . 77 . 76 . 74 . 72 . 74 . 71 . 72 - - .'],
+    ['triangle', 0.16, '48 . . . 55 . . . 48 . . . 55 . . . 53 . . . 55 . . . 48 . . . 43 . 47 .']
+  ], ['k.h.s.h.k.h.s.hhk.h.s.h.k.h.s.hh']),
+  shop: [['箱ティッシュ', 'ボックスティッシュ まとめ買い']],
+  bill(t) { const n = t.tissue || 0; return { v: n + '枚', n: '箱ティッシュ ' + (n / 150).toFixed(1) + '箱分', sec: n * 2, yen: n * 100 / 150 }; },
   init() { this.n = 0; this.need = 0; this.lean = 1; this.pop = 1; this.shake = 0; this.fly = []; this.set = []; this.ptr = {}; this.t = 0; },
   started() { return this.n > 0; },
   result() { return this.n + '枚'; },
-  commit(tot) { tot.tissue += this.n; },
+  commit(tot) { add(tot, 'tissue', this.n); },
   box() { const bw = Math.min(W * 0.62, 290), bh = bw * 0.5; return { cx: W / 2, top: H * 0.6, bw, bh }; },
   down(id, x) { this.ptr[id] = { x, acc: 0 }; },
   move(id, x) {
@@ -330,11 +443,17 @@ const tissue = {
 /* ---------- ステージ2: トイレットペーパー ---------- */
 const PXM = 400, ROLL_M = 30;
 const toilet = {
-  prompt: '伸ばせ！', hint: '下に何度もスワイプ', bg: '#8fd6e0',
+  key: 'toilet', name: 'トイレットペーパー', prompt: '伸ばせ！', hint: '下に何度もスワイプ', bg: '#8fd6e0',
+  bgm: song(164, [ // 加速感
+    ['sawtooth', 0.035, '62 . 65 . 69 . 65 . 64 . 67 . 70 . 67 . 65 . 69 . 72 . 69 . 67 . 70 . 74 - - .'],
+    ['square', 0.06, '38 . 50 . 38 . 50 . 36 . 48 . 36 . 48 . 34 . 46 . 34 . 46 . 33 . 45 . 33 . 45 .']
+  ], ['k.h.s.h.k.k.s.h.k.h.s.h.k.h.s.ss']),
+  shop: [['トイレットペーパー', 'トイレットペーパー まとめ買い']],
+  bill(t) { const m = (t.tp || 0) / PXM; return { v: m.toFixed(1) + 'm', n: 'ロール ' + (m / ROLL_M).toFixed(1) + '個分', sec: m * 4, yen: m * 50 / ROLL_M }; },
   init() { this.len = 0; this.vel = 0; this.pend = 0; this.ptr = {}; this.tick = 0; this.rolls = 0; this.refill = 0; },
   started() { return this.len > 30; },
   result() { return (this.len / PXM).toFixed(1) + 'm'; },
-  commit(tot) { tot.tp += this.len; },
+  commit(tot) { add(tot, 'tp', this.len); },
   down(id, x, y) { this.ptr[id] = y; },
   move(id, x, y) {
     if (!(id in this.ptr)) return;
@@ -424,11 +543,20 @@ const toilet = {
 /* ---------- ステージ3: 障子 ---------- */
 const COLS = 4, ROWS = 5;
 const shoji = {
-  prompt: '破れ！', hint: 'タップ、またはなぞる', bg: '#d9c79a',
+  key: 'shoji', name: '障子', prompt: '破れ！', hint: 'タップ、またはなぞる', bg: '#d9c79a',
+  bgm: song(128, [ // 和風（都節の音階、琴と太鼓）
+    ['pluck', 0.12, '76 . 77 . 76 . 72 . 71 - . . 69 . 71 . 72 . 71 . 69 . 65 . 64 - - - . . . .'],
+    ['pluck', 0.1, '52 . . . . . 57 . 52 . . . 59 . . . 57 . . . 53 . . . 52 . . . . . . .']
+  ], ['t...t.t.t...t...t...t.t.t.t.tttt']),
+  shop: [['障子紙', '障子紙'], ['障子の補修シール', '障子 補修シール']],
+  bill(t) {
+    const h = t.holes || 0, f = t.faces || 0;
+    return { v: h + '穴', n: f ? '張り替え ' + f + '面（1穴でも1面まるごと）' : '無傷', sec: f * 3600, yen: f * 2000 };
+  },
   init() { this.n = 0; this.faces = 0; this.dirty = false; this.panes = new Array(COLS * ROWS).fill(null); this.old = null; this.slide = 0; this.wait = 0; this.bits = []; },
   started() { return this.n > 0; },
   result() { return this.n + '穴'; },
-  commit(tot) { tot.holes += this.n; tot.faces += this.faces; },
+  commit(tot) { add(tot, 'holes', this.n); add(tot, 'faces', this.faces); },
   geo() {
     const w = Math.min(W * 0.86, 420), h = Math.min(H * 0.72, w * 1.6);
     const x = (W - w) / 2, y = H * 0.15 + (H * 0.72 - h) / 2;
@@ -535,23 +663,62 @@ const shoji = {
 };
 
 /* ---------- 進行 ---------- */
-const STAGES = [tissue, toilet, shoji];
-const ROUNDS = 3, TOTAL = STAGES.length * ROUNDS;
-const PLAY = [6, 5, 4], PROMPT = [1.0, 0.8, 0.65], FLASH = [1.0, 0.85, 0.7];
-let mode = 'title', idx = 0, st = null, tm = 0, paused = false, clock = 0, committed = true;
-let tot = { tissue: 0, tp: 0, holes: 0, faces: 0 };
-const hud = $('hud'), bar = $('bar'), stg = $('stg');
-const panels = { title: $('title'), pause: $('pause'), result: $('result') };
+const NORMAL = [tissue, toilet, shoji];
+const BONUS = null;
+const N = NORMAL.length;
+const ROUNDS = 2;          // 周回モードの周回数（全ステージが揃ってから調整）
+const BONUS_RATE = 0.05;   // 無限モードで、1周目のあと各ステージの後に押すなボタンが割り込む確率
+const PLAY = [6, 5, 4], PROMPT = [1.0, 0.8, 0.65], FLASH = [1.0, 0.85, 0.7], RATE = [1, 1.1, 1.2]; // 周回ごと。4周目以降は最後の値
+const SITE = 'https://sakuichi.github.io/itazu-rush/';
+const add = (t, k, v) => { t[k] = (t[k] || 0) + v; };
+let mode = 'title', gameMode = 'loop', st = null, tm = 0, paused = false, clock = 0, committed = true;
+let count = 0, order = [], isBonus = false, lastBonus = false, bonusDone = false, played = new Set(), forced = [];
+let tot = {}, res = null, rt = 0, barH = 0;
+const hud = $('hud');
+const panels = { title: $('title'), pause: $('pause'), result: $('result'), shop: $('shop') };
 
-function startGame() {
-  initAudio();
-  tot = { tissue: 0, tp: 0, holes: 0, faces: 0 }; idx = 0; paused = false;
-  panels.title.hidden = true; panels.result.hidden = true; panels.pause.hidden = true; hud.hidden = false;
-  begin();
+const speed = () => Math.min(PLAY.length - 1, Math.floor(Math.max(0, count - 1) / N));
+function shuffle(prev) {
+  const a = NORMAL.slice();
+  for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+  if (a.length > 1 && a[0] === prev) [a[0], a[1]] = [a[1], a[0]]; // 周の切れ目で同じステージが続かないように
+  return a;
 }
-function begin() {
-  st = STAGES[idx % STAGES.length]; st.init(); committed = false;
-  mode = 'prompt'; tm = 0; stg.textContent = (idx + 1) + '/' + TOTAL; sfx.prompt();
+function normalNext() {
+  if (count % N === 0) order = shuffle(order[N - 1]);
+  let s = order[count % N];
+  if (forced.length) { const k = forced.shift(); s = NORMAL.find(x => x.key === k) || s; }
+  count++;
+  return s;
+}
+function pickNext() {
+  if (gameMode === 'loop') {
+    if (count < ROUNDS * N) return normalNext();
+    if (BONUS && !bonusDone) { bonusDone = true; return BONUS; }
+    return null;
+  }
+  if (BONUS && count >= N && !lastBonus && (Math.random() < BONUS_RATE || forced[0] === 'bonus')) {
+    if (forced[0] === 'bonus') forced.shift();
+    lastBonus = true; return BONUS;
+  }
+  lastBonus = false;
+  return normalNext();
+}
+function startGame(m) {
+  initAudio();
+  if (m) gameMode = m;
+  tot = {}; played = new Set(); count = 0; order = []; lastBonus = false; bonusDone = false; paused = false; res = null;
+  panels.title.hidden = true; panels.result.hidden = true; panels.pause.hidden = true; panels.shop.hidden = true; hud.hidden = false;
+  $('recHint').textContent = ''; $('saveVid').hidden = true;
+  recStart();
+  next();
+}
+function next() {
+  const s = pickNext();
+  if (!s) { finish(); return; }
+  st = s; isBonus = s === BONUS; st.init(); played.add(st.key); committed = false;
+  mode = 'prompt'; tm = 0;
+  if (isBonus) sfx.rare(); else sfx.prompt();
 }
 function commit() { if (!committed && st && (mode === 'play' || mode === 'flash')) st.commit(tot); committed = true; }
 function fmtTime(sec) {
@@ -560,92 +727,209 @@ function fmtTime(sec) {
   const m = Math.round(sec / 60);
   return m < 60 ? m + '分' : Math.floor(m / 60) + '時間' + (m % 60 ? (m % 60) + '分' : '');
 }
+function verdict(a) {
+  return a < 1 ? 'まだバレてない' : a < 30 ? '正座10分' : a < 60 ? 'おやつ抜き' : a < 100 ? '家族会議' :
+    a < 200 ? 'おこづかい3か月停止' : '伝説のいたずらっ子';
+}
+function buildResult() {
+  const rows = [];
+  let sec = 0, yen = 0, extra = 0;
+  for (const s of BONUS ? NORMAL.concat(BONUS) : NORMAL) {
+    if (!played.has(s.key)) continue;
+    const b = s.bill(tot);
+    rows.push({ k: s.name, v: b.v, n: b.n });
+    sec += b.sec || 0; yen += b.yen || 0; extra += b.angry || 0;
+  }
+  yen = Math.round(yen);
+  // 怒られ度（%）: 損害100円で1%、後始末2分で1%、ほかに押すなボタンの回数など。目安値で、全ステージが揃ってから調整する
+  const angry = Math.min(999, Math.round(yen / 100 + sec / 120 + extra));
+  const tb = 0.3 + rows.length * 0.09 + 0.2;
+  return { rows, sec, yen, angry, word: verdict(angry), tb, ts: tb + 0.85, shown: 0, stamped: false };
+}
 function finish() {
-  commit(); mode = 'result'; paused = false;
+  commit(); music.stop();
+  mode = 'result'; paused = false; recPause(false);
   hud.hidden = true; panels.pause.hidden = true;
-  const m = tot.tp / PXM;
-  const sec = tot.tissue * 2 + m * 4 + tot.faces * 3600;
-  const yen = Math.round(tot.tissue * 100 / 150 + m * 50 / ROLL_M + tot.faces * 2000);
-  $('rTissue').textContent = tot.tissue + '枚';
-  $('rTissueN').textContent = '箱ティッシュ ' + (tot.tissue / 150).toFixed(1) + '箱分';
-  $('rTp').textContent = m.toFixed(1) + 'm';
-  $('rTpN').textContent = 'ロール ' + (m / ROLL_M).toFixed(1) + '個分';
-  $('rShoji').textContent = tot.holes + '穴';
-  $('rShojiN').textContent = tot.faces ? '張り替え ' + tot.faces + '面（1穴でも1面まるごと）' : '無傷';
-  $('rTime').textContent = fmtTime(sec);
-  $('rYen').textContent = yen.toLocaleString('ja-JP') + '円';
-  $('rAngry').textContent = Math.min(999, Math.round(yen / 100)) + '%';
-  $('angryWord').textContent =
-    yen < 100 ? '判定：まだバレてない' : yen < 2500 ? '判定：正座10分' : yen < 5000 ? '判定：おやつ抜き' :
-    yen < 9000 ? '判定：家族会議' : '判定：おこづかい3か月停止';
-  panels.result.hidden = false; sfx.final();
+  res = buildResult(); rt = calm ? 9 : 0;
+  panels.result.hidden = false; barH = $('resbar').offsetHeight + 26;
+  $('recHint').textContent = rec ? '動画を書き出し中です…' : (recOn && canRec ? '録画を開始できませんでした。' + (recErr ? '（' + recErr + '）' : '') : '');
+  fillShop();
+  sfx.final();
 }
 function goTitle() {
-  mode = 'title'; paused = false; st = null; committed = true;
-  hud.hidden = true; panels.pause.hidden = true; panels.result.hidden = true; panels.title.hidden = false;
+  music.stop(); recCancel();
+  mode = 'title'; paused = false; st = null; committed = true; res = null;
+  hud.hidden = true; panels.pause.hidden = true; panels.result.hidden = true; panels.shop.hidden = true; panels.title.hidden = false;
 }
 function setPause(v) {
   if (mode !== 'prompt' && mode !== 'play' && mode !== 'flash') return;
+  if (paused === v) return;
   paused = v; panels.pause.hidden = !v;
-  if (v && st) st.up(null);
+  if (v) { if (st) st.up(null); music.stop(); }
+  else if (mode === 'play') music.start(st.bgm, RATE[speed()]);
+  recPause(v);
 }
 
 function update(dt) {
   clock += dt;
-  if (paused || !st || mode === 'title' || mode === 'result') return;
+  if (mode === 'result') { updateResult(dt); return; }
+  if (paused || !st || mode === 'title') return;
   tm += dt;
-  const r = Math.min(ROUNDS - 1, Math.floor(idx / STAGES.length));
-  if (mode === 'prompt') { if (tm >= PROMPT[r]) { mode = 'play'; tm = 0; } }
-  else if (mode === 'play') {
+  const r = speed();
+  if (mode === 'prompt') {
+    if (tm >= PROMPT[r] + (isBonus ? 0.7 : 0)) { mode = 'play'; tm = 0; music.start(st.bgm, RATE[r]); }
+  } else if (mode === 'play') {
     st.update(dt);
-    if (tm >= PLAY[r]) { mode = 'flash'; tm = 0; st.up(null); sfx.flash(); }
+    if (tm >= PLAY[r]) { mode = 'flash'; tm = 0; st.up(null); music.stop(); sfx.flash(); }
   } else if (mode === 'flash') {
     st.update(dt);
-    if (tm >= FLASH[r]) { commit(); idx++; if (idx >= TOTAL) finish(); else begin(); }
+    if (tm >= FLASH[r]) { commit(); next(); }
   }
 }
+function updateResult(dt) {
+  if (!res) return;
+  rt += dt;
+  const shown = Math.min(res.rows.length, Math.floor((rt - 0.3) / 0.09) + 1);
+  if (shown > res.shown && !calm) { res.shown = shown; sfx.row(); }
+  if (!res.stamped && rt >= res.ts) { res.stamped = true; sfx.stamp(); }
+  if (rec && rt >= res.ts + 1.5) recStop(); // 判定のハンコを押してから少しで録画を止める
+}
+
+/* ---------- 描画（HUDと結果もキャンバスに描く。録画に写すため） ---------- */
 function burst() {
   ctx.fillStyle = POP; ctx.fillRect(0, 0, W, H);
-  const cx = W / 2, cy = H * 0.45, R = Math.hypot(W, H), a0 = calm ? 0 : clock * 0.25, N = 16;
+  const cx = W / 2, cy = H * 0.45, R = Math.hypot(W, H), a0 = calm ? 0 : clock * 0.25, NB = 16;
   ctx.fillStyle = POP2;
-  for (let i = 0; i < N; i += 2) {
-    const a = a0 + i / N * Math.PI * 2, b = a + Math.PI * 2 / N;
+  for (let i = 0; i < NB; i += 2) {
+    const a = a0 + i / NB * Math.PI * 2, b = a + Math.PI * 2 / NB;
     ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(a) * R, cy + Math.sin(a) * R); ctx.lineTo(cx + Math.cos(b) * R, cy + Math.sin(b) * R); ctx.closePath(); ctx.fill();
   }
+}
+function hudLabel() {
+  if (isBonus) return gameMode === 'loop' ? 'ボーナス' : 'レア！';
+  return gameMode === 'loop' ? count + '/' + ROUNDS * N : count + '本目';
+}
+function drawHud(frac) {
+  ctx.save();
+  ctx.font = `15px ${DISPLAY}`; ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+  const label = hudLabel(), ph = 28, px = 16, py = 18, pw = ctx.measureText(label).width + 20;
+  rr(px, py, pw, ph, ph / 2); ctx.fillStyle = INK; ctx.fill();
+  ctx.fillStyle = PAPER; ctx.fillText(label, px + 10, py + ph / 2 + 1);
+  const bx = px + pw + 10, bw = Math.max(24, W - 16 - 44 - 10 - bx), bh = 20, by = py + ph / 2 - bh / 2;
+  rr(bx, by, bw, bh, bh / 2); ctx.fillStyle = INK; ctx.fill();
+  if (frac > 0) { rr(bx + 3, by + 3, Math.max(bh - 6, (bw - 6) * frac), bh - 6, (bh - 6) / 2); ctx.fillStyle = HOT; ctx.fill(); }
+  ctx.restore();
 }
 function draw() {
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   if (W < 2 || H < 2) return;
-  const r = Math.min(ROUNDS - 1, Math.floor(idx / STAGES.length));
-  if (!st || mode === 'title' || mode === 'result') { burst(); bar.style.transform = 'scaleX(1)'; return; }
+  if (mode === 'result') { drawResult(); return; }
+  if (!st || mode === 'title') { burst(); return; }
+  const r = speed();
   if (mode === 'prompt') {
     burst();
-    const k = calm ? 1 : Math.min(1, tm / 0.16), s = 1.35 - 0.35 * k;
+    const big = Math.min(W * 0.24, 120), k = calm ? 1 : Math.min(1, tm / 0.16), s = 1.35 - 0.35 * k;
+    if (isBonus) {
+      const e = calm ? 1 : Math.min(1, tm / 0.2);
+      ctx.save(); ctx.translate(W / 2, H * 0.42 - big * 1.05); ctx.rotate(0.05 + (calm ? 0 : Math.sin(clock * 9) * 0.03)); ctx.scale(0.6 + 0.4 * e, 0.6 + 0.4 * e);
+      bigText(gameMode === 'loop' ? 'ボーナス！' : 'レア出現！', 0, 0, Math.min(W * 0.11, 52), HOT, INK, W * 0.8);
+      ctx.restore();
+    }
     ctx.save(); ctx.translate(W / 2, H * 0.42); ctx.rotate(-0.06); ctx.scale(s, s);
-    bigText(st.prompt, 0, 0, Math.min(W * 0.24, 120), PAPER, INK, W * 0.86);
+    bigText(st.prompt, 0, 0, big, PAPER, INK, W * 0.86);
     ctx.restore();
     ctx.font = `900 ${Math.min(22, W * 0.055)}px ${BODY}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = INK;
-    ctx.fillText(st.hint, W / 2, H * 0.42 + Math.min(W * 0.24, 120) * 0.95);
-    bar.style.transform = 'scaleX(1)';
+    ctx.fillText(st.hint, W / 2, H * 0.42 + big * 0.95);
+    drawHud(1);
     return;
   }
   st.draw();
   if (mode === 'play') {
     ctx.save(); ctx.textAlign = 'left';
     ctx.font = `${Math.min(44, W * 0.11)}px ${DISPLAY}`; ctx.textBaseline = 'top'; ctx.lineJoin = 'round';
-    ctx.lineWidth = 8; ctx.strokeStyle = INK; ctx.strokeText(st.result(), 18, 70);
-    ctx.fillStyle = PAPER; ctx.fillText(st.result(), 18, 70); ctx.restore();
+    ctx.lineWidth = 8; ctx.strokeStyle = INK; ctx.strokeText(st.result(), 18, 62);
+    ctx.fillStyle = PAPER; ctx.fillText(st.result(), 18, 62); ctx.restore();
     if (!st.started()) st.drawHint(tm);
-    bar.style.transform = `scaleX(${clamp(1 - tm / PLAY[r], 0, 1)})`;
+    drawHud(clamp(1 - tm / PLAY[r], 0, 1));
   } else {
     ctx.fillStyle = 'rgba(35,27,46,.45)'; ctx.fillRect(0, 0, W, H);
     const k = calm ? 1 : Math.min(1, tm / 0.14), s = 1.3 - 0.3 * k;
     ctx.save(); ctx.translate(W / 2, H * 0.42); ctx.rotate(0.04); ctx.scale(s, s);
     bigText(st.result(), 0, 0, Math.min(W * 0.26, 130), POP, INK, W * 0.86);
     ctx.restore();
-    bigText('いたずら成功！', W / 2, H * 0.42 + Math.min(W * 0.26, 130) * 0.9, Math.min(30, W * 0.075), PAPER, INK, W * 0.8);
-    bar.style.transform = 'scaleX(0)';
+    bigText(st.done || 'いたずら成功！', W / 2, H * 0.42 + Math.min(W * 0.26, 130) * 0.9, Math.min(30, W * 0.075), PAPER, INK, W * 0.8);
+    drawHud(0);
   }
+}
+function fitText(str, x, y, maxW, font, align) {
+  ctx.font = font; ctx.textAlign = align || 'left';
+  const m = ctx.measureText(str).width;
+  if (m > maxW) { ctx.save(); ctx.translate(x, y); ctx.scale(maxW / m, 1); ctx.fillText(str, 0, 0); ctx.restore(); }
+  else ctx.fillText(str, x, y);
+}
+function drawResult() {
+  burst();
+  if (!res) return;
+  const n = res.rows.length, RH = 38;
+  const need = 18 + 24 + 12 + n * RH + 12 + 128 + 14 + 70 + 8 + 34 + 18 + 14;
+  const top = 14, avail = Math.max(200, H - barH - top);
+  const s = Math.min(1.15, avail / need, (W - 32) / 330);
+  const cw = Math.min(420, (W - 32) / s);
+  ctx.save(); ctx.translate(W / 2 - cw * s / 2, top); ctx.scale(s, s);
+  rr(7, 7, cw, need, 6); ctx.fillStyle = INK; ctx.fill();
+  rr(0, 0, cw, need, 6); ctx.fillStyle = PAPER; ctx.fill(); ctx.lineWidth = 4; ctx.strokeStyle = INK; ctx.stroke();
+  const L = 18, R = cw - 18;
+  let y = 18;
+  ctx.textBaseline = 'middle';
+  ctx.font = `900 12px ${BODY}`;
+  const tag = '本日のいたずら', tw = ctx.measureText(tag).width + 18;
+  rr(L, y, tw, 24, 3); ctx.fillStyle = INK; ctx.fill();
+  ctx.fillStyle = POP; ctx.textAlign = 'left'; ctx.fillText(tag, L + 9, y + 12.5);
+  ctx.fillStyle = INK; fitText('いたずラッシュ', R, y + 13, R - L - tw - 12, `17px ${DISPLAY}`, 'right');
+  y += 24 + 12;
+  res.rows.forEach((row, i) => {
+    const a = calm ? 1 : clamp((rt - 0.3 - i * 0.09) / 0.12, 0, 1);
+    if (a > 0) {
+      ctx.save(); ctx.globalAlpha = a; ctx.translate((1 - a) * 24, 0);
+      ctx.fillStyle = INK; fitText(row.k, L, y + 12, (R - L) * 0.55, `900 15px ${BODY}`);
+      ctx.fillStyle = '#6b6178'; fitText(row.n, L, y + 28, (R - L) * 0.62, `700 11px ${BODY}`);
+      ctx.fillStyle = INK; fitText(row.v, R, y + 18, (R - L) * 0.4, `21px ${DISPLAY}`, 'right');
+      ctx.restore();
+    }
+    ctx.save(); ctx.setLineDash([5, 5]); ctx.strokeStyle = 'rgba(35,27,46,.25)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(L, y + RH - 2); ctx.lineTo(R, y + RH - 2); ctx.stroke(); ctx.restore();
+    y += RH;
+  });
+  y += 12;
+  const kb = calm ? 1 : clamp((rt - res.tb) / 0.6, 0, 1), ke = 1 - Math.pow(1 - kb, 3);
+  rr(L - 4, y, R - L + 8, 128, 4); ctx.fillStyle = INK; ctx.fill();
+  const lines = [
+    ['後始末にかかる時間', fmtTime(res.sec * ke), PAPER, 22],
+    ['損害額', Math.round(res.yen * ke).toLocaleString('ja-JP') + '円', PAPER, 22],
+    ['怒られ度', Math.round(res.angry * ke) + '%', HOT, 30]
+  ];
+  lines.forEach(([k, v, c, fs], i) => {
+    const ly = y + 24 + i * 38;
+    ctx.fillStyle = POP; fitText(k, L + 8, ly, (R - L) * 0.5, `700 13px ${BODY}`);
+    ctx.fillStyle = c; fitText(v, R - 8, ly, (R - L) * 0.5, `${fs}px ${DISPLAY}`, 'right');
+  });
+  y += 128 + 14;
+  if (rt >= res.ts) {
+    const e = calm ? 1 : clamp((rt - res.ts) / 0.15, 0, 1), sc = 2.2 - 1.2 * e;
+    ctx.save(); ctx.globalAlpha = e; ctx.translate(cw / 2, y + 35); ctx.rotate(-0.07); ctx.scale(sc, sc);
+    ctx.font = `26px ${DISPLAY}`;
+    const word = '判定：' + res.word, ww = Math.min(cw - 70, ctx.measureText(word).width + 36);
+    rr(-ww / 2, -30, ww, 60, 8); ctx.lineWidth = 5; ctx.strokeStyle = HOT; ctx.stroke();
+    ctx.fillStyle = HOT; fitText(word, 0, 2, ww - 30, `26px ${DISPLAY}`, 'center');
+    ctx.restore();
+  }
+  y += 70 + 8;
+  ctx.fillStyle = '#6b6178'; ctx.font = `700 11px ${BODY}`; ctx.textAlign = 'center';
+  ctx.fillText('時間と金額はざっくりした目安です。', cw / 2, y + 8);
+  ctx.fillText('実際にやると本当に怒られます。', cw / 2, y + 25);
+  y += 34;
+  ctx.font = `700 12px ${BODY}`; ctx.fillStyle = INK; ctx.fillText(SITE.replace('https://', '').replace(/\/$/, ''), cw / 2, y + 10);
+  ctx.restore();
 }
 let last = 0;
 function frame(ts) {
@@ -654,6 +938,80 @@ function frame(ts) {
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
+
+/* ---------- 録画（オンのときだけ。映像はキャンバス、音は録画用の出力） ---------- */
+const canRec = !!(cv.captureStream && window.MediaRecorder);
+let recOn = false, rec = null, recBlob = null, recTok = 0, recFinish = null, recErr = '';
+try { recOn = canRec && localStorage.getItem('itazurush-rec') === '1'; } catch (e) {}
+// 録画用のストリームは一度だけ作って使い回す（毎回作り直すと、端末によっては2回目以降が録れない）
+let recVideo = null, recAV = null;
+function recStart() {
+  recBlob = null; recTok++; recFinish = null; recErr = '';
+  if (!recOn || !canRec) return;
+  const types = ['video/mp4;codecs="avc1.42E01E,mp4a.40.2"', 'video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4;codecs=avc1,mp4a.40.2', 'video/mp4',
+    'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
+  let mime = '', r = null, done = false;
+  const tok = recTok, chunks = [];
+  try { mime = types.find(t => MediaRecorder.isTypeSupported(t)) || ''; } catch (e) {}
+  const opt = mime ? { mimeType: mime, videoBitsPerSecond: 4e6, audioBitsPerSecond: 128000 } : undefined;
+  try {
+    if (!recVideo) recVideo = cv.captureStream(30);
+    if (!recAV && recDest) recAV = new MediaStream(recVideo.getVideoTracks().concat(recDest.stream.getAudioTracks()));
+  } catch (e) { recErr = String(e && e.message || e); }
+  // 音つきで始められなければ、映像だけで録る
+  for (const c of [recAV, recVideo]) {
+    if (!c || r) continue;
+    try { r = new MediaRecorder(c, opt); r.start(1000); } catch (e) { recErr = String(e && e.message || e); r = null; }
+  }
+  if (!r) return;
+  const fin = () => {
+    if (done || tok !== recTok) return; done = true;
+    if (!chunks.length) { $('recHint').textContent = 'この端末では録画データを作れませんでした。' + (recErr ? '（' + recErr + '）' : ''); return; }
+    recBlob = new Blob(chunks, { type: (r.mimeType || mime || 'video/webm').split(';')[0] });
+    $('saveVid').hidden = false; $('recHint').textContent = '動画の準備ができました。';
+  };
+  r.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+  r.onstop = fin; r.onerror = e => { recErr = String(e && e.error && e.error.message || '録画エラー'); };
+  recFinish = fin; rec = r;
+}
+function recStop() {
+  const r = rec, fin = recFinish; rec = null; if (!r) return;
+  if (r.state !== 'inactive') { try { r.stop(); } catch (e) {} }
+  if (fin) setTimeout(fin, 2000); // 停止の通知が来ない端末向けの保険
+}
+function recCancel() { recTok++; recBlob = null; recStop(); }
+function recPause(v) {
+  if (!rec) return;
+  try { if (v && rec.state === 'recording') rec.pause(); else if (!v && rec.state === 'paused') rec.resume(); } catch (e) {}
+}
+
+/* ---------- シェア・買い直し ---------- */
+const AMAZON_TAG = '202610jokesite-22';
+function shareText() {
+  return 'いたずラッシュで遊んだ結果\n損害額 ' + res.yen.toLocaleString('ja-JP') + '円／後始末 ' + fmtTime(res.sec) +
+    '\n怒られ度 ' + res.angry + '%【' + res.word + '】\n#いたずラッシュ';
+}
+function saveBlob(blob, name, text) {
+  let file = null;
+  const coarse = window.matchMedia && matchMedia('(pointer:coarse)').matches;
+  try { file = new File([blob], name, { type: blob.type }); } catch (e) {}
+  if (coarse && file && navigator.canShare && navigator.canShare({ files: [file] })) { navigator.share({ files: [file], text }).catch(() => {}); return; }
+  const a = document.createElement('a'), u = URL.createObjectURL(blob);
+  a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(u), 4000);
+}
+function fillShop() {
+  const ul = $('shopList'); ul.textContent = '';
+  const items = [];
+  for (const s of BONUS ? NORMAL.concat(BONUS) : NORMAL) if (played.has(s.key) && s.shop) items.push(...s.shop);
+  items.forEach(([label, q]) => {
+    const li = document.createElement('li'), a = document.createElement('a'), sm = document.createElement('small');
+    a.href = 'https://www.amazon.co.jp/s?k=' + encodeURIComponent(q) + '&tag=' + AMAZON_TAG;
+    a.target = '_blank'; a.rel = 'sponsored noopener'; a.textContent = label; sm.textContent = 'Amazonで探す →';
+    a.appendChild(sm); li.appendChild(a); ul.appendChild(li);
+  });
+  $('shopBtn').hidden = !items.length;
+}
 
 /* ---------- 入力 ---------- */
 function pos(e) { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
@@ -668,17 +1026,51 @@ const end = e => { if (st) st.up(e.pointerId); };
 cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end);
 cv.addEventListener('contextmenu', e => e.preventDefault());
 
-$('startBtn').addEventListener('click', startGame);
-$('againBtn').addEventListener('click', startGame);
+$('startBtn').addEventListener('click', () => startGame('loop'));
+$('endlessBtn').addEventListener('click', () => startGame('endless'));
+$('againBtn').addEventListener('click', () => startGame());
 $('pauseBtn').addEventListener('click', () => setPause(true));
 $('resumeBtn').addEventListener('click', () => { initAudio(); setPause(false); });
 $('quitBtn').addEventListener('click', finish);
 $('homeBtn').addEventListener('click', goTitle);
 $('home2Btn').addEventListener('click', goTitle);
-$('soundChk').addEventListener('change', e => { soundOn = e.target.checked; });
+$('shopBtn').addEventListener('click', () => { panels.shop.hidden = false; });
+$('shopClose').addEventListener('click', () => { panels.shop.hidden = true; });
+$('xpost').addEventListener('click', () => {
+  if (!res) return;
+  window.open('https://twitter.com/intent/tweet?text=' + encodeURIComponent(shareText()) + '&url=' + encodeURIComponent(SITE), '_blank', 'noopener');
+});
+$('saveVid').addEventListener('click', () => {
+  if (!recBlob || !res) return;
+  saveBlob(recBlob, 'itazu-rush-' + res.yen + 'yen.' + (recBlob.type.indexOf('mp4') >= 0 ? 'mp4' : 'webm'), shareText() + '\n' + SITE);
+  $('recHint').textContent = '動画を書き出しました。';
+});
+function setSound(v) {
+  soundOn = v; $('soundChk').checked = v; $('soundChk2').checked = v;
+  if (spk) spk.gain.value = v ? 1 : 0;
+  try { localStorage.setItem('itazurush-sound', v ? '1' : '0'); } catch (e) {}
+}
+$('soundChk').addEventListener('change', e => setSound(e.target.checked));
+$('soundChk2').addEventListener('change', e => setSound(e.target.checked));
+$('recChk').addEventListener('change', e => {
+  recOn = e.target.checked; if (recOn) initAudio(); // 録画前に音の準備を済ませておく
+  try { localStorage.setItem('itazurush-rec', recOn ? '1' : '0'); } catch (err) {}
+});
+setSound(soundOn);
+if (canRec) { $('recOpt').hidden = false; $('recNote').hidden = false; $('recChk').checked = recOn; }
+$('chips').innerHTML = NORMAL.map(s => '<li>' + s.name + '</li>').join('') + (BONUS ? '<li class="secret">？？？</li>' : '');
+$('startSub').textContent = '全' + N + '種を' + ROUNDS + '周';
+window.addEventListener('resize', () => { if (mode === 'result') barH = $('resbar').offsetHeight + 26; });
 document.addEventListener('visibilitychange', () => { if (document.hidden) setPause(true); });
 if (document.fonts && document.fonts.load) {
-  document.fonts.load(`40px ${DISPLAY}`, '出せ伸ばせ破れ！枚穴いたずら成功おかわりm0123456789.').catch(() => {});
+  const txt = NORMAL.concat(BONUS || []).map(s => s.prompt + s.name + (s.done || '')).join('') +
+    'いたずら成功！おかわりボーナスレア出現本目判定：後始末にかかる時間損害額怒られ度円秒分時間%/0123456789.' + 'まだバレてない正座10分おやつ抜き家族会議おこづかい3か月停止伝説のいたずらっ子';
+  document.fonts.load(`40px ${DISPLAY}`, txt).catch(() => {});
+}
+// 自動テスト用（URLの末尾が #test のときだけ）
+if (location.hash === '#test') {
+  window.__itazu = { get mode() { return mode; }, get st() { return st; }, get count() { return count; }, get res() { return res; }, get tot() { return tot; },
+    get rec() { return rec; }, get recBlob() { return recBlob; }, NORMAL, BONUS, music, force(keys) { forced = keys.slice(); }, finish, setPause };
 }
 })();
 </script>
