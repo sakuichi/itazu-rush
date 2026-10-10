@@ -1492,7 +1492,7 @@ const puddle = {
     // 自分の長靴（見下ろし）
     const lift = this.state === 'air' ? Math.sin(this.k * Math.PI) * 70 * s : 0, crouch = this.state === 'charge' ? this.charge * 26 * s : 0;
     for (const sx of [-1, 1]) {
-      ctx.save(); ctx.translate(W / 2 + sx * 50 * s, H + 16 * s + crouch - lift); ctx.rotate(sx * 0.12);
+      ctx.save(); ctx.translate(W / 2 + sx * 40 * s, H + 13 * s + crouch - lift); ctx.rotate(sx * 0.12); ctx.scale(0.8, 0.8); // 停めてある車と大きさを合わせるため、長靴は小さめ
       rr(-30 * s, -96 * s, 60 * s, 120 * s, 30 * s); ctx.fillStyle = '#ffd23f'; ctx.fill(); ctx.lineWidth = 4; ctx.strokeStyle = INK; ctx.stroke();
       ctx.beginPath(); ctx.ellipse(-10 * s, -70 * s, 8 * s, 14 * s, 0, 0, Math.PI * 2); ctx.fillStyle = 'rgba(255,255,255,.55)'; ctx.fill();
       ctx.restore();
@@ -2226,6 +2226,8 @@ try { recOn = canRec && localStorage.getItem('itazurush-rec') === '1'; } catch (
 // 録画用のストリームは一度だけ作って使い回す（毎回作り直すと、端末によっては2回目以降が録れない）
 // 容量を抑えるため、画面そのものではなく横 REC_W px の録画用キャンバスに縮小コピーしたものを録る
 const REC_W = 720;
+// 録画のコマ数。URL に ?recfps=15 などを付けると試せる（容量の比較用。8〜30）
+const REC_FPS = (() => { try { const v = parseInt(new URLSearchParams(location.search).get("recfps"), 10); return v >= 8 && v <= 30 ? v : 20; } catch (e) { return 20; } })();
 let recVideo = null, recAV = null, recCv = null, recCtx = null;
 function recStart() {
   recBlob = null; recTok++; recFinish = null; recErr = '';
@@ -2242,7 +2244,7 @@ function recStart() {
       recCv.width = REC_W; recCv.height = Math.round(REC_W * H / Math.max(1, W) / 2) * 2; // 偶数にする（動画の形式の都合）
       recCtx = recCv.getContext('2d');
       recCtx.drawImage(cv, 0, 0, recCv.width, recCv.height);
-      recVideo = recCv.captureStream(24);
+      recVideo = recCv.captureStream(REC_FPS);
     }
     if (!recAV && recDest) recAV = new MediaStream(recVideo.getVideoTracks().concat(recDest.stream.getAudioTracks()));
   } catch (e) { recErr = String(e && e.message || e); }
