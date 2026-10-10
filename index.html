@@ -1849,7 +1849,7 @@ const N = NORMAL.length;
 const ROUNDS = 2;          // 周回モードの周回数（全ステージが揃ってから調整）
 const BONUS_RATE = 0.05;   // 無限モードで、1周目のあと各ステージの後に押すなボタンが割り込む確率
 // 周回ごと。4周目以降は最後の値。周回モード全体の録画が X の無料ユーザーの上限（140秒）に収まるよう、約136秒にしている
-const PLAY = [5, 4.5, 4], PROMPT = [0.8, 0.7, 0.65], FLASH = [0.8, 0.7, 0.65], RATE = [1, 1.1, 1.2];
+const PLAY = [5, 4.5, 4], PROMPT = [0.8, 0.7, 0.65], FLASH = [0.8, 0.7, 0.65], RATE = [1, 1.25, 1.4]; // RATE: BGMのテンポ倍率。周回が進むとはっきり速くして焦らせる
 const SITE = 'https://sakuichi.github.io/itazu-rush/';
 const add = (t, k, v) => { t[k] = (t[k] || 0) + v; };
 const mx = (t, k, v) => { t[k] = Math.max(t[k] || 0, v); }; // 1回のステージでの最高（図鑑の判定用）
