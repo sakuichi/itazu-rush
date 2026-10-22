@@ -6,7 +6,7 @@
 ## 構成
 - 本体は `index.html` 1ファイル（HTML・CSS・JavaScript）。ライブラリは使っていない。描画は Canvas 2D、音は WebAudio で合成、フォントは Google Fonts。
 - `ogp.png`：SNSのカード画像。`c/0.html`〜`c/5.html` と `c/0.png`〜`c/5.png`：挑戦状の入口ページ（判定ごと）とカード画像。
-- `docs/architecture.md`：箱の並び（Mermaid）。`index.html` の中の区切り（下記）を箱として描く。
+- `docs/architecture.md`：処理フロー（Mermaid）。`index.html` の中の区切り（下記）を箱として描く。
 - `tests/`：自動テスト（下記）。公開サイトには関係しない。
 
 `index.html` の中は `/* ---------- 名前 ---------- */` のコメントで区切ってある。主な区切り：

@@ -1910,7 +1910,7 @@ function startGame(m) {
 function next() {
   const s = pickNext();
   if (!s) { finish(true); return; }
-  st = s; isBonus = s === BONUS; st.init(); played.add(st.key); committed = false;
+  st = s; isBonus = s === BONUS; st.init(); committed = false;
   mode = 'prompt'; tm = 0;
   if (isBonus) sfx.rare(); else sfx.prompt();
 }
@@ -2036,7 +2036,7 @@ function update(dt) {
   tm += dt;
   const r = speed();
   if (mode === 'prompt') {
-    if (tm >= PROMPT[r] + (isBonus ? 0.5 : 0)) { mode = 'play'; tm = 0; music.start(st.bgm, RATE[r]); }
+    if (tm >= PROMPT[r] + (isBonus ? 0.5 : 0)) { mode = 'play'; tm = 0; played.add(st.key); music.start(st.bgm, RATE[r]); } // 遊んだ扱いはプレイが始まってから（お題の途中でやめたステージは結果に出さない）
   } else if (mode === 'play') {
     st.update(dt);
     if (tm >= PLAY[r]) {
@@ -2458,7 +2458,7 @@ if (document.fonts && document.fonts.load) {
 // 自動テスト用（URLの末尾が #test のときだけ）
 if (location.hash === '#test') {
   window.__itazu = { get mode() { return mode; }, get st() { return st; }, get count() { return count; }, get res() { return res; }, get tot() { return tot; },
-    get rec() { return rec; }, get AC() { return AC; }, get bus() { return bus; }, get recBlob() { return recBlob; }, NORMAL, BONUS, music, force(keys) { forced = keys.slice(); }, set forceHap(v) { forceHap = v; }, finish, setPause };
+    get rec() { return rec; }, get AC() { return AC; }, get bus() { return bus; }, get recBlob() { return recBlob; }, NORMAL, BONUS, music, force(keys) { forced = keys.slice(); }, set forceHap(v) { forceHap = v; }, finish, setPause, tierOf, ZUKAN, get zukan() { return zukan; } };
 }
 })();
 </script>
