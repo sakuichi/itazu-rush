@@ -318,16 +318,16 @@ const shoe = {
     return { v: (r + w + d) + '個', n: (where ? where + 'から' : '') + '取ってくる' + (d ? '・かじられて買い直し' : ''),
       sec: r * SHOE_SEC.roof + w * SHOE_SEC.tree + d * SHOE_SEC.dog, yen: d * SHOE_DOG_YEN };
   },
-  init() { this.n = 0; this.hit = { roof: 0, tree: 0, dog: 0 }; this.shoes = []; this.landed = []; this.pops = []; this.ptr = {}; },
+  init() { this.n = 0; this.hit = { roof: 0, tree: 0, dog: 0 }; this.shoes = []; this.landed = []; this.pops = []; this.ptr = {}; this.hapAt = hapTime(); this.pt = 0; this.hapK = -1; this.dog = null; this.dogCatch = 0; },
   started() { return this.n > 0 || this.shoes.length > 0 || this.landed.length > 0; },
   result() { return this.n + '個'; },
   commit(tot) {
     add(tot, 'shoeRoof', this.hit.roof); add(tot, 'shoeTree', this.hit.tree); add(tot, 'shoeDog', this.hit.dog);
-    mx(tot, 'shoeRoofMax', this.hit.roof);
+    mx(tot, 'shoeRoofMax', this.hit.roof); if (this.hapK >= 0) tot.hapShoe = 1;
   },
   geo() {
     const s = SC();
-    return { s, by: H * 0.82, ground: H * 0.58,
+    return { s, by: H * 0.82, ground: H * 0.58, dogY: H * 0.66, // dogY: ハプニングのイヌが靴をキャッチする高さ
       // 引っかかる場所。下（手前）から順に、靴がその高さを通るときの横の位置で決まる
       tg: [{ k: 'dog', y: H * 0.55, x0: W * 0.06, x1: W * 0.28, say: 'ワン！' },
         { k: 'tree', y: H * 0.36, x0: W * 0.72, x1: W * 0.98, say: '引っかかった！' },
@@ -350,9 +350,27 @@ const shoe = {
   size(y) { const g = this.geo(); return 22 * g.s * clamp(1 - (g.by - y) / (H * 1.5), 0.5, 1); }, // 遠くへ行くほど小さく見える
   update(dt) {
     const g = this.geo();
+    // ハプニング：イヌが犬小屋から飛び出してきて庭を走り回り、頭の上を通る靴をジャンプでキャッチする
+    if (this.hapK >= 0) this.hapK += dt;
+    if (scoring()) {
+      this.pt += dt;
+      if (this.hapAt >= 0 && this.hapK < 0 && this.pt >= this.hapAt) { this.hapK = 0; this.dog = { x: W * 0.17, vx: W * 0.45, hold: 0, c: null }; sfx.woof(); sfx.hap(); }
+    }
+    const d = this.dog;
+    if (d) {
+      d.hold = Math.max(0, d.hold - dt); if (d.hold === 0) d.c = null;
+      d.x += d.vx * dt;
+      if (d.x > W * 0.88) { d.x = W * 0.88; d.vx = -Math.abs(d.vx); } else if (d.x < W * 0.12) { d.x = W * 0.12; d.vx = Math.abs(d.vx); }
+    }
     for (let i = this.shoes.length - 1; i >= 0; i--) {
       const b = this.shoes[i], py = b.y;
       b.x += b.vx * dt; b.y += b.vy * dt; b.r += dt * 12;
+      if (d && d.hold === 0 && py > g.dogY && b.y <= g.dogY && Math.abs(b.x - d.x) < 36 * g.s) { // キャッチされた靴は、犬小屋に入ったのと同じ（かじられて買い直し）
+        this.shoes.splice(i, 1); d.hold = 0.6; d.c = b.c; this.dogCatch++;
+        if (scoring()) { this.n++; this.hit.dog++; }
+        this.pops.push({ x: d.x, y: g.dogY - 10 * g.s, say: 'ナイスキャッチ！', life: 1 }); sfx.woof();
+        continue;
+      }
       const t = g.tg.find(t => py > t.y && b.y <= t.y && b.x >= t.x0 && b.x <= t.x1);
       if (t) {
         this.shoes.splice(i, 1);
@@ -400,10 +418,27 @@ const shoe = {
     ctx.beginPath(); ctx.moveTo(W * 0.17, H * 0.43); ctx.lineTo(W * 0.31, H * 0.51); ctx.lineTo(W * 0.03, H * 0.51); ctx.closePath(); ctx.fillStyle = '#4f86f7'; ctx.fill(); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(W * 0.11, H * 0.63); ctx.lineTo(W * 0.11, H * 0.57); ctx.arc(W * 0.17, H * 0.57, W * 0.06, Math.PI, 0); ctx.lineTo(W * 0.23, H * 0.63); ctx.fillStyle = '#3a2a22'; ctx.fill(); ctx.stroke(); // 入り口
     this.drawLanded('dog');
+    if (this.dog) this.drawDog(this.dog);
     for (const b of this.shoes) this.drawShoe(b.x, b.y, b.r, this.size(b.y), b.c);
     const last = this.shoes[this.shoes.length - 1];
     if (!last || last.y < g.by - 60 * s) this.drawShoe(W / 2, g.by, 0, 22 * s, '#ff9e3d'); // 次の靴
     for (const p of this.pops) { ctx.globalAlpha = Math.min(1, p.life * 2); bigText(p.say, clamp(p.x, W * 0.25, W * 0.75), p.y - 30 * s - (1 - p.life) * 30 * s, Math.round(24 * s), HOT, PAPER, W * 0.5); ctx.globalAlpha = 1; }
+    hapBanner('イヌが飛び出してきた！', this.hapK);
+  },
+  drawDog(d) { // ハプニングのイヌ（横から見たところ。走る向きを向く。キャッチした靴をくわえる）
+    const g = this.geo(), s = g.s, dir = d.vx >= 0 ? 1 : -1, k = Math.sin(clock * 18) * 6 * s;
+    const jump = d.hold > 0 ? Math.sin(Math.PI * (1 - d.hold / 0.6)) * 26 * s : 0, y = g.dogY + 34 * s - jump;
+    ctx.save(); ctx.translate(d.x, y); ctx.scale(dir, 1);
+    ctx.strokeStyle = INK; ctx.lineCap = 'round'; ctx.lineWidth = 5 * s;
+    ctx.beginPath(); ctx.moveTo(-14 * s, 6 * s); ctx.lineTo(-14 * s - k, 20 * s); ctx.moveTo(14 * s, 6 * s); ctx.lineTo(14 * s + k, 20 * s); ctx.stroke(); // 脚
+    ctx.lineWidth = 4 * s; ctx.beginPath(); ctx.moveTo(-22 * s, -4 * s); ctx.quadraticCurveTo(-34 * s, -12 * s, -30 * s, -22 * s); ctx.stroke(); // しっぽ
+    ctx.lineWidth = 3; ctx.fillStyle = '#f2d1a0';
+    ctx.beginPath(); ctx.ellipse(0, 0, 24 * s, 12 * s, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); // 体
+    ctx.beginPath(); ctx.arc(24 * s, -14 * s, 12 * s, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); // 頭
+    ctx.fillStyle = '#b9824e'; ctx.beginPath(); ctx.ellipse(17 * s, -19 * s, 5 * s, 9 * s, -0.4, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); // 耳
+    ctx.fillStyle = INK; ctx.beginPath(); ctx.arc(28 * s, -17 * s, 2 * s, 0, Math.PI * 2); ctx.arc(36 * s, -12 * s, 3 * s, 0, Math.PI * 2); ctx.fill(); // 目と鼻
+    ctx.restore();
+    if (d.c) this.drawShoe(d.x + dir * 38 * s, y - 6 * s, dir * 0.3, 13 * s, d.c);
   },
   drawHint(t) { const g = this.geo(), p = (t * 1.3) % 1; finger(W / 2, g.by - p * g.by * 0.5, 0.9 * (1 - p * 0.6)); }
 };
@@ -414,5 +449,6 @@ ZUKAN_EXTRA.push(
   { id: 'soda', name: '人間噴水', desc: '炭酸を1回で1000mL噴き出させる', ok: t => (t.sodaMax || 0) >= 1000 },
   { id: 'pudding', name: 'つまみ食い名人', desc: 'プリンを1回で3個食べる', ok: t => (t.puddingMax || 0) >= 3 },
   { id: 'sticker', name: 'デコり職人', desc: 'シールを1回で20枚貼る', ok: t => (t.stickerMax || 0) >= 20 },
-  { id: 'shoe', name: 'あーした天気になーれ', desc: '靴を1回で3個 屋根にのせる', ok: t => (t.shoeRoofMax || 0) >= 3 }
+  { id: 'shoe', name: 'あーした天気になーれ', desc: '靴を1回で3個 屋根にのせる', ok: t => (t.shoeRoofMax || 0) >= 3 },
+  { id: 'hapShoe', name: 'ナイスキャッチ', desc: '靴飛ばしでイヌが靴をキャッチする', secret: '靴飛ばしで、まれに起きる何か', ok: t => !!t.hapShoe }
 );

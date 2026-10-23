@@ -10,14 +10,14 @@ let browser;
 before(async () => { browser = await launch(); });
 after(async () => { await browser.close(); });
 
-test('大盛りのタイトル画面：タイトル、15種と？？？、全15種から20本、図鑑0/35が出て、エラーがない', async () => {
+test('大盛りのタイトル画面：タイトル、15種と？？？、全15種から20本、図鑑0/36が出て、エラーがない', async () => {
   const { page, errors } = await openOomori(browser);
   assert.equal(await page.title(), 'いたずラッシュ大盛り！');
   const chips = await page.$$eval('#chips li', ls => ls.map(l => l.textContent));
   assert.deepEqual(chips, ['ティッシュ', 'トイレットペーパー', '障子', '歯みがき粉', 'シャンプー', '泥んこ足', 'おもちゃ箱', '水たまり', 'ホース', 'エレベーター',
     '落書き', '炭酸', 'プリン', 'シール', '靴飛ばし', '？？？']);
   assert.equal(await page.$eval('#startSub', e => e.textContent), '全15種から20本');
-  assert.equal(await page.$eval('#zukanCount', e => e.textContent), '0/35');
+  assert.equal(await page.$eval('#zukanCount', e => e.textContent), '0/36');
   assert.deepEqual(errors, []);
 });
 
@@ -58,7 +58,7 @@ test('図鑑：大盛りと既存版で別々に保存され、互いの数に�
     assert.ok((await page.evaluate(() => window.__itazu.res)).newZ.includes('各階停止'));
     await page.reload(); await page.waitForFunction(() => !!window.__itazu);
     const oCount = await page.$eval('#zukanCount', e => e.textContent);
-    assert.match(oCount, /^[1-9]\d*\/35$/);
+    assert.match(oCount, /^[1-9]\d*\/36$/);
     const oZukan = await page.evaluate(() => window.__itazu.zukan);
     assert.ok(oZukan.elev, '大盛りの図鑑に保存されていない');
     const store = await page.evaluate(() => ({ oomori: localStorage.getItem('itazurush-oomori-zukan'), old: localStorage.getItem('itazurush-zukan') }));
