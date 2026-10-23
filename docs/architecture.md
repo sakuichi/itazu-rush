@@ -70,7 +70,7 @@ flowchart TD
 ```
 
 ## 受け渡しのメモ
-- **ページ → 設定**：`window.ITAZU` の項目（`title` `site` `store` `stages` `order` `total` `roundLen` `modeName` `intro`）が `CONF` の既定値を上書きする。既定値は既存版と同じ。
+- **ページ → 設定**：`window.ITAZU` の項目（`title` `site` `store` `stages` `order` `total` `roundLen` `modeName` `tags` `intro`）が `CONF` の既定値を上書きする。既定値は既存版と同じ。
 - **出し方**：`order:'rounds'` は今までどおり周ごとにシャッフルして `ROUNDS` 周。`order:'random'` は `total` 本の組（全種類を1回ずつ＋残りは別々の種類）をシャッフルして順に出す（直前と同じは続かない。無限モードは `total` 本ごとに作り直す）。テンポは `roundLen` 本ごとに上がる。
 - **ステージ → 集計**：`commit(tot)` で、そのステージの成果を `tot` に足す（`add`）。1回のステージでの最高は `mx` で記録する（図鑑の判定用）。
 - **集計 → 結果**：各ステージの `bill(tot)` が `{ v, n, sec, yen, angry }` を返し、`buildResult` が合計して怒られ度と判定を出す。

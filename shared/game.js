@@ -11,6 +11,7 @@ const CONF = Object.assign({
   total: 20,           // order が 'random' のときの本数
   roundLen: 10,        // order が 'random' のとき、テンポが上がる区切り（前半10本・後半10本）
   modeName: '周回モード', // 図鑑の文などで、決まった本数で終わるモードを呼ぶ名前
+  tags: '#いたずラッシュ', // 投稿文のハッシュタグ（複数ならスペース区切り）
   intro: '子どものころやりたかったいたずらを、数秒ずつやり放題。最後に「大人の現実」を請求されます。\nインストール不要、ブラウザですぐ遊べる「いたずラッシュ」'
 }, window.ITAZU || {});
 const RANDOM = CONF.order === 'random';
@@ -515,9 +516,9 @@ function vsText() {
 const challengeUrl = () => SITE + 'c/' + tierOf(res.angry) + '.html?vs=' + res.angry;
 function shareText() {
   const head = CONF.title + 'で怒られ度 ' + res.angry + '%【' + res.word + '】\n損害額 ' + res.yen.toLocaleString('ja-JP') + '円／後始末 ' + fmtTime(res.sec);
-  if (gameMode !== 'loop') return head + '（無限モード）\n#いたずラッシュ\n' + SITE;
+  if (gameMode !== 'loop') return head + '（無限モード）\n' + CONF.tags + '\n' + SITE;
   const vs = vsText();
-  return head + (vs ? '\n' + vs : '') + '\nこの記録、超えられる？\n#いたずラッシュ\n' + challengeUrl();
+  return head + (vs ? '\n' + vs : '') + '\nこの記録、超えられる？\n' + CONF.tags + '\n' + challengeUrl();
 }
 function saveBlob(blob, name, text) {
   let file = null;
@@ -600,7 +601,7 @@ function copyText(text, hint) {
   if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(ok, fallback); else fallback();
 }
 // タイトル画面から共有するときの文（まだ結果がないので、サイトの紹介）
-const introText = () => CONF.intro + '\n#いたずラッシュ\n' + SITE;
+const introText = () => CONF.intro + '\n' + CONF.tags + '\n' + SITE;
 $('copyPost').addEventListener('click', () => { if (res) copyText(shareText(), 'recHint'); });
 $('titleCopy').addEventListener('click', () => copyText(introText(), 'titleHint'));
 $('titleX').addEventListener('click', () => {
