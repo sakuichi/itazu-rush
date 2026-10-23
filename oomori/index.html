@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>いたずラッシュ大盛り！</title>
+<meta name="description" content="何が出るか分からない、いたずら20本勝負。子どものころやりたかったいたずらを数秒ずつやり放題して、最後に大人の現実（後始末の時間・損害額・怒られ度）を突きつけられるネタサイト。">
+<meta property="og:type" content="website">
+<meta property="og:title" content="いたずラッシュ大盛り！">
+<meta property="og:description" content="何が出るか分からない、いたずら20本勝負。最後に大人の現実が待っています。">
+<meta name="twitter:card" content="summary_large_image">
+<meta property="og:url" content="https://sakuichi.github.io/itazu-rush/oomori/">
+<meta property="og:image" content="https://sakuichi.github.io/itazu-rush/oomori/ogp.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:image" content="https://sakuichi.github.io/itazu-rush/oomori/ogp.png">
+<link rel="canonical" href="https://sakuichi.github.io/itazu-rush/oomori/">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Zen+Maru+Gothic:wght@500;700;900&display=swap">
+<link rel="stylesheet" href="../shared/game.css">
+<style>h1 em{display:block;font-style:normal;color:var(--mint);font-size:.62em;margin-top:.12em}</style>
+</head>
+<body>
+
+<div id="app">
+  <canvas id="cv" aria-label="ゲーム画面"></canvas>
+
+  <div id="hud" hidden>
+    <button id="pauseBtn" type="button" aria-label="中断する"><svg width="16" height="18" viewBox="0 0 16 18" aria-hidden="true"><rect x="1" y="1" width="5" height="16" rx="1.5" fill="currentColor"/><rect x="10" y="1" width="5" height="16" rx="1.5" fill="currentColor"/></svg></button>
+  </div>
+
+  <section class="panel" id="title">
+    <div class="card">
+      <p class="challenge" id="challenge" hidden></p>
+      <h1>いたず<br><span>ラッシュ</span><em>大盛り！</em></h1>
+      <p class="lead">何が出るかは、やってみないと分からない。<br>いたずら20本、全部やってから怒られよう。</p>
+      <ul class="chips" id="chips" aria-label="出てくるいたずら"></ul>
+      <div class="btns">
+        <button class="big" id="startBtn" type="button">はじめる<small id="startSub"></small></button>
+        <button class="big sub" id="endlessBtn" type="button">無限モード<small>「やめて結果を見る」まで続く</small></button>
+      </div>
+      <div class="opts">
+        <label class="opt" for="soundChk"><input type="checkbox" id="soundChk" checked>音を出す</label>
+        <label class="opt" for="recChk" id="recOpt" hidden><input type="checkbox" id="recChk">録画する</label>
+      </div>
+      <button class="zukanbtn" id="zukanBtn" type="button">いたずら図鑑 <b id="zukanCount">0/0</b></button>
+      <div class="sharerow">
+        <button class="mini" id="titleX" type="button">Xで共有</button>
+        <button class="mini" id="titleCopy" type="button">コピー</button>
+      </div>
+      <p class="small" id="titleHint" role="status"></p>
+      <p class="small" id="recNote" hidden>録画すると、プレイから結果までを音つきの動画で保存できます（音を出さない設定でも、動画には音が入ります）。無限モードでは、Xに投稿できる長さに収めるため、最後の70〜140秒だけを残します。</p>
+      <p class="small">毎回ランダムに20本。後半の10本は速くなります。失敗はありません。右上の一時停止ボタンでいつでも中断できます。</p>
+      <p class="small"><a href="../">元祖「いたずラッシュ」（全10種を2周）はこちら</a></p>
+      <p class="small">※いたずらをすすめるものではありません。画面の中だけで楽しんでください。</p>
+      <p class="small">Amazonのアソシエイトとして、当サイトは適格販売により収入を得ています。</p>
+    </div>
+  </section>
+
+  <section class="panel" id="pause" hidden>
+    <div class="card">
+      <h2>中断中</h2>
+      <div class="btns">
+        <button class="big" id="resumeBtn" type="button">つづける</button>
+        <button class="big sub" id="quitBtn" type="button">ここでやめて結果を見る</button>
+        <button class="big sub" id="homeBtn" type="button">タイトルにもどる</button>
+      </div>
+      <label class="opt" for="soundChk2"><input type="checkbox" id="soundChk2" checked>音を出す</label>
+    </div>
+  </section>
+
+  <section class="panel bottom" id="result" hidden>
+    <div class="resbar" id="resbar">
+      <button class="big" id="againBtn" type="button">もう一回いたずらする</button>
+      <a class="pick" id="pick" href="#" target="_blank" rel="sponsored noopener" hidden><span class="pr">PR</span><span class="pt" id="pickText"></span><small>Amazon →</small></a>
+      <div class="minirow">
+        <button class="mini" id="saveVid" type="button" hidden>動画を保存</button>
+        <button class="mini" id="xpost" type="button">Xでポスト</button>
+        <button class="mini" id="copyPost" type="button">コピー</button>
+        <button class="mini" id="shopBtn" type="button">買い直す</button>
+        <button class="mini" id="home2Btn" type="button">タイトル</button>
+      </div>
+      <p class="small" id="recHint" role="status"></p>
+    </div>
+  </section>
+
+  <section class="panel" id="zukan" hidden>
+    <div class="card">
+      <div class="tag">あつめた称号</div>
+      <h2>いたずら図鑑</h2>
+      <p class="small" id="zukanSum"></p>
+      <ul class="zlist" id="zukanList"></ul>
+      <button class="big sub" id="zukanClose" type="button">とじる</button>
+    </div>
+  </section>
+
+  <section class="panel" id="shop" hidden>
+    <div class="card">
+      <div class="tag">PR</div>
+      <h2>いたずらした分を<br>買い直す</h2>
+      <ul class="shoplist" id="shopList"></ul>
+      <p class="small">Amazonのアソシエイトとして、当サイトは適格販売により収入を得ています。</p>
+      <button class="big sub" id="shopClose" type="button">とじる</button>
+    </div>
+  </section>
+</div>
+
+<script>
+// 大盛りの設定（ない項目は既存版と同じ。中身は shared/game.js の CONF）
+window.ITAZU = {
+  title: 'いたずラッシュ大盛り！',
+  site: 'https://sakuichi.github.io/itazu-rush/oomori/',
+  store: 'itazurush-oomori-',
+  stages: ['tissue', 'toilet', 'shoji', 'paste', 'shampoo', 'mud', 'toys', 'puddle', 'hose', 'elev', 'graffiti', 'soda', 'pudding', 'sticker', 'shoe'],
+  order: 'random', total: 20, roundLen: 10,
+  modeName: '20本モード',
+  intro: '何が出るか分からない、いたずら20本勝負。最後に「大人の現実」を請求されます。\nインストール不要、ブラウザですぐ遊べる「いたずラッシュ大盛り！」'
+};
+</script>
+<script src="../shared/base.js"></script>
+<script src="../shared/stages.js"></script>
+<script src="../shared/stages-extra.js"></script>
+<script src="../shared/game.js"></script>
+</body>
+</html>

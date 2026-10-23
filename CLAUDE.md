@@ -4,25 +4,27 @@
 決まったこと・経緯・数値の一覧は `HANDOFF.md` にある。作業前に読み、作業後は内容に合わせて更新する。
 
 ## 構成
-- 本体は `index.html` 1ファイル（HTML・CSS・JavaScript）。ライブラリは使っていない。描画は Canvas 2D、音は WebAudio で合成、フォントは Google Fonts。
-- `ogp.png`：SNSのカード画像。`c/0.html`〜`c/5.html` と `c/0.png`〜`c/5.png`：挑戦状の入口ページ（判定ごと）とカード画像。
-- `docs/architecture.md`：処理フロー（Mermaid）。`index.html` の中の区切り（下記）を箱として描く。
+- ページは2つ。既存版 `index.html`（10種×2周）と、「いたずラッシュ大盛り！」`oomori/index.html`（ランダム20本、`HANDOFF.md` 6章）。ライブラリは使っていない。描画は Canvas 2D、音は WebAudio で合成、フォントは Google Fonts。
+- 中身は `shared/` で共有する：`game.css`（スタイル）、`base.js`（画面・小道具・音・BGM）、`stages.js`（既存10種・共通部品・押すなボタン）、`stages-extra.js`（大盛りの新規ステージ）、`game.js`（設定・進行・図鑑・描画・録画・シェア・入力）。普通の `<script src>` をこの順に読み、トップレベルの `const` を共有する。
+- サイトごとの違いは、各ページの設定 `window.ITAZU`（`game.js` の `CONF`）に書く。既存版は設定なし＝既定値。
+- `ogp.png`：SNSのカード画像。`c/0.html`〜`c/5.html` と `c/0.png`〜`c/5.png`：挑戦状の入口ページ（判定ごと）とカード画像。大盛りは `oomori/` の下に同じものがある。
+- `docs/architecture.md`：処理フロー（Mermaid）。`shared/*.js` の中の区切り（下記）を箱として描く。
 - `tests/`：自動テスト（下記）。公開サイトには関係しない。
 
-`index.html` の中は `/* ---------- 名前 ---------- */` のコメントで区切ってある。主な区切り：
-音 → BGM → ステージ1〜3 → ステージ4〜の共通部品 → ステージ4〜10 → ボーナス（押すなボタン）→ 進行 → いたずら図鑑 → 描画 → 録画 → シェア・買い直し → 入力。
-ステージは共通のオブジェクトの形で書き、`NORMAL` 配列に足すだけで動く（形は `HANDOFF.md` 3章）。
+`shared/*.js` の中は `/* ---------- 名前 ---------- */` のコメントで区切ってある。主な区切り：
+音 → BGM（base.js）→ ステージ1〜3 → ステージ4〜の共通部品 → ステージ4〜10 → ボーナス（押すなボタン）（stages.js）→ 新規ステージ（stages-extra.js）→ 進行 → いたずら図鑑 → 描画 → 録画 → シェア・買い直し → 入力（game.js）。
+ステージは共通のオブジェクトの形で書き、`STAGE_LIST` に足して、ページの設定 `stages` にキーを書くと動く（形は `HANDOFF.md` 3章）。
 
 ## 起動方法
-- `index.html` をブラウザで直接開けば動く（サーバー不要）。
+- `index.html`（大盛りは `oomori/index.html`）をブラウザで直接開けば動く（サーバー不要）。
 - URL の付け足し：
   - `#test`：自動テスト用に `window.__itazu` を出す（ステージ順の指定 `force([...])`、ハプニングを必ず起こす `forceHap = true` など）。ふだんは何も出ない。
   - `?vs=数字`：挑戦状つきで開く。`?recfps=数字`：録画のコマ数を変える（容量の比較用）。
 
 ## テスト
 - ブラウザを実際に操作する自動テスト。`puppeteer-core` で、PCにインストール済みの Microsoft Edge をヘッドレスで動かす（ブラウザのダウンロードはしない）。
-- 実行：`npm install`（初回だけ）→ `npm test`
-- テストは `#test` 付きで `index.html` を開き、`window.__itazu` でステージ順などを決めて、マウス操作で遊ばせ、数値（スコア・結果・図鑑・録画の有無など）を確かめる。
+- 実行：`npm install`（初回だけ）→ `npm test`。Edge が起動しないときは、環境変数 `BROWSER_PATH` に Chrome の場所（`C:/Program Files/Google/Chrome/Application/chrome.exe`）を入れて実行する。
+- テストは `#test` 付きで `index.html`（大盛りのテスト `tests/oomori*.js` は `oomori/index.html`）を開き、`window.__itazu` でステージ順などを決めて、マウス操作で遊ばせ、数値（スコア・結果・図鑑・録画の有無など）を確かめる。
 - 見た目・手触り・音の聞こえ方は自動テストにできないので「手動確認」として扱い、確認手順を文章で示す。
 - 録画などの重いテストは時間がかかる（周回モード全体で約3分）。
 
