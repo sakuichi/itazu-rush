@@ -12,11 +12,11 @@ const OLD_PAGE = fileUrl(path.join(ROOT, 'index.html'));
 const SITE = 'https://sakuichi.github.io/itazu-rush/';
 const OOMORI_SITE = SITE + 'oomori/';
 
-// 既存10種＋新規10種（第1弾5種・第2弾5種。この順で #chips に並ぶ）
+// 既存10種＋新規15種（第1弾5種・第2弾5種・第3弾5種。この順で #chips に並ぶ）
 const OLD_KEYS = ['tissue', 'toilet', 'shoji', 'paste', 'shampoo', 'mud', 'toys', 'puddle', 'hose', 'elev'];
-const NEW_KEYS = ['graffiti', 'soda', 'pudding', 'sticker', 'shoe', 'calendar', 'vacuum', 'futon', 'news', 'bubble'];
+const NEW_KEYS = ['graffiti', 'soda', 'pudding', 'sticker', 'shoe', 'calendar', 'vacuum', 'futon', 'news', 'bubble', 'piano', 'pillow', 'sofa', 'light', 'yarn'];
 const KEYS = OLD_KEYS.concat(NEW_KEYS);
-const NEW_NAMES = { graffiti: '落書き', soda: '炭酸', pudding: 'プリン', sticker: 'シール', shoe: '靴飛ばし', calendar: 'カレンダー', vacuum: '掃除機', futon: '布団', news: '新聞', bubble: 'シャボン玉' };
+const NEW_NAMES = { graffiti: '落書き', soda: '炭酸', pudding: 'プリン', sticker: 'シール', shoe: '靴飛ばし', calendar: 'カレンダー', vacuum: '掃除機', futon: '布団', news: '新聞', bubble: 'シャボン玉', piano: 'ピアノ', pillow: '枕', sofa: 'ソファ', light: '電気のスイッチ', yarn: '毛糸玉' };
 
 // ページを開く（既存版の helpers.open と同じ形）。errors にはページ内のエラーがたまる
 async function openPage(browser, url, { query = '', width = 390, height = 844 } = {}) {
@@ -94,6 +94,34 @@ const NEW_ACTS = {
   async bubble(p, W, H) {
     const m = p.mouse; await m.move(W * 0.2, H * 0.45); await m.down();
     await m.move(W * 0.8, H * 0.4, { steps: 30 }); await sleep(800); await m.up(); await sleep(600);
+  },
+  // 鍵盤（画面の下のほう）を左右に3回なぞる
+  async piano(p, W, H) {
+    const m = p.mouse;
+    for (let i = 0; i < 3; i++) { await m.move(W * 0.06, H * 0.8); await m.down(); await m.move(W * 0.94, H * 0.8, { steps: 14 }); await m.up(); }
+  },
+  // 枕をつかんで、左右の壁に何回かぶつける
+  async pillow(p, W, H) {
+    const m = p.mouse; await m.move(W * 0.3, H * 0.75); await m.down();
+    for (let i = 0; i < 3; i++) { await m.move(W + 40, H * 0.5, { steps: 3 }); await m.move(-40, H * 0.45, { steps: 5 }); }
+    await m.up();
+  },
+  // 背もたれの破れ目のあたりを、左右に何往復もほじる
+  async sofa(p, W, H) {
+    const m = p.mouse; await m.move(W * 0.4, H * 0.38); await m.down();
+    for (let i = 0; i < 12; i++) await m.move(i % 2 ? W * 0.4 : W * 0.6, H * 0.38, { steps: 3 });
+    await m.up();
+  },
+  // 押したまま上下に何回もはじく
+  async light(p, W, H) {
+    const m = p.mouse; await m.move(W * 0.5, H * 0.5); await m.down();
+    for (let i = 0; i < 8; i++) await m.move(W * 0.5, i % 2 ? H * 0.5 : H * 0.58, { steps: 2 });
+    await m.up();
+  },
+  // 毛糸玉を、向きを変えて3回はじく
+  async yarn(p, W, H) {
+    const m = p.mouse;
+    for (const [dx, dy] of [[60, -200], [-200, -60], [150, 120]]) { await m.move(W * 0.5, H * 0.6); await m.down(); await m.move(W * 0.5 + dx, H * 0.6 + dy, { steps: 3 }); await m.up(); await sleep(200); }
   }
 };
 const OACTS = Object.assign({}, ACTS, NEW_ACTS);

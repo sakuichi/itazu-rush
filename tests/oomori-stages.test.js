@@ -8,8 +8,8 @@ let browser;
 before(async () => { browser = await launch(); });
 after(async () => { await browser.close(); });
 
-// 表示の形（落書きは小数1けたの m、炭酸は整数の mL、ほかは整数の個・枚）
-const UNIT = { graffiti: /^\d+\.\dm$/, soda: /^\d+mL$/, pudding: /^\d+個$/, sticker: /^\d+枚$/, shoe: /^\d+個$/, calendar: /^\d+日$/, vacuum: /^\d+個$/, futon: /^\d+回$/, news: /^\d+本$/, bubble: /^\d+個$/ };
+// 表示の形（落書きは小数1けたの m、炭酸は整数の mL、枕は「羽根○枚」、毛糸玉は10m未満なら小数1けたの m、ほかは整数）
+const UNIT = { graffiti: /^\d+\.\dm$/, soda: /^\d+mL$/, pudding: /^\d+個$/, sticker: /^\d+枚$/, shoe: /^\d+個$/, calendar: /^\d+日$/, vacuum: /^\d+個$/, futon: /^\d+回$/, news: /^\d+本$/, bubble: /^\d+個$/, piano: /^\d+音$/, pillow: /^羽根\d+枚$/, sofa: /^\d+cm$/, light: /^\d+回$/, yarn: /^(\d\.\d|\d{2,})m$/ };
 
 for (const key of NEW_KEYS) {
   test(`${key}（${NEW_NAMES[key]}）：操作すると数字が増え、時間切れのあとは増えない`, async () => {
@@ -21,7 +21,7 @@ for (const key of NEW_KEYS) {
   });
 }
 
-// 炭酸・プリン・新聞・シャボン玉は1つでも損害が出る。落書き・シール・カレンダー・掃除機・布団は段階制、靴飛ばしは屋根なら0円（犬小屋で損害が出るのは oomori-shoe.test.js）
+// 炭酸・プリン・新聞・シャボン玉は1つでも損害が出る。落書き・シール・カレンダー・掃除機・布団と第3弾の5種は段階制、靴飛ばしは屋根なら0円（犬小屋で損害が出るのは oomori-shoe.test.js、第3弾の境目は oomori-extra3.test.js）
 const MUST_COST = ['soda', 'pudding', 'news', 'bubble'];
 for (const key of NEW_KEYS) {
   test(`${key}（${NEW_NAMES[key]}）：結果に行が出て、損害額が${MUST_COST.includes(key) ? '0円より大きい' : '数字で出る'}`, async () => {
