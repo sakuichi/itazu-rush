@@ -19,6 +19,7 @@ Object.assign(sfx, {
 /* ---------- 大盛り1: 落書き ---------- */
 const CRAYONS = ['#ff5a4e', '#2f8fd6', '#2fb5a3', '#a66cf0', '#ff9e3d', '#231b2e'];
 const WALL_PATCH = 3; // m。これを超えて描いたら、消しゴムでは落ちないので壁紙の張り替え
+const WALL_SEC = 600, WALL_YEN = 1500; // 張り替え1回の時間と値段
 const graffiti = {
   key: 'graffiti', name: '落書き', prompt: '描け！', hint: 'なぞって 壁に落書き', bg: '#f3e7d3',
   bgm: song(136, [ // のびのびお絵かき
@@ -28,7 +29,7 @@ const graffiti = {
   shop: [['メラミンスポンジ', 'メラミンスポンジ'], ['壁紙の補修シート', '壁紙 補修シート']],
   bill(t) {
     const m = t.graffiti || 0, w = t.wallpaper || 0;
-    return { v: m.toFixed(1) + 'm', n: (w ? '壁紙の張り替え ' + w + '回・' : '') + '消しゴムでこする', sec: m * 20 + w * 1800, yen: w * 2000 };
+    return { v: m.toFixed(1) + 'm', n: (w ? '壁紙の張り替え ' + w + '回・' : '') + '消しゴムでこする', sec: m * 20 + w * WALL_SEC, yen: w * WALL_YEN };
   },
   init() { this.m = 0; this.lines = []; this.ptr = {}; this.acc = 0; this.npts = 0; },
   started() { return this.m > 0.05; },
@@ -303,8 +304,8 @@ const sticker = {
 
 /* ---------- 大盛り5: 靴飛ばし ---------- */
 const SHOE_COLORS = ['#ff5a4e', '#4f86f7', '#2fb5a3', '#ffd23f', '#a66cf0'];
-const SHOE_SEC = { roof: 600, tree: 300, dog: 60 }; // 1個取ってくるのにかかる秒（屋根ははしご、木は棒、犬小屋は犬をなだめる）
-const SHOE_DOG_YEN = 2000; // 犬小屋に入った靴は、かじられて買い直し
+const SHOE_SEC = { roof: 180, tree: 120, dog: 60 }; // 1個取ってくるのにかかる秒（屋根ははしご、木は棒、犬小屋は犬をなだめる）
+const SHOE_DOG_YEN = 1500; // 犬小屋に入った靴は、かじられて買い直し
 const shoe = {
   key: 'shoe', name: '靴飛ばし', prompt: '飛ばせ！', hint: '上にはじいて 靴を飛ばす', bg: '#bfe3f5',
   bgm: song(172, [ // あーした天気になーれ
@@ -445,11 +446,11 @@ const shoe = {
 
 STAGE_LIST.push(graffiti, soda, pudding, sticker, shoe);
 ZUKAN_EXTRA.push(
-  { id: 'graffiti', name: '壁の芸術家', desc: '落書きを1回で10m描く', ok: t => (t.graffitiMax || 0) >= 10 },
+  { id: 'graffiti', name: '壁の芸術家', desc: '落書きを1回で6m描く', ok: t => (t.graffitiMax || 0) >= 6 },
   { id: 'soda', name: '人間噴水', desc: '炭酸を1回で1000mL噴き出させる', ok: t => (t.sodaMax || 0) >= 1000 },
-  { id: 'pudding', name: 'つまみ食い名人', desc: 'プリンを1回で3個食べる', ok: t => (t.puddingMax || 0) >= 3 },
+  { id: 'pudding', name: 'つまみ食い名人', desc: 'プリンを1回で5個食べる', ok: t => (t.puddingMax || 0) >= 5 },
   { id: 'sticker', name: 'デコり職人', desc: 'シールを1回で20枚貼る', ok: t => (t.stickerMax || 0) >= 20 },
-  { id: 'shoe', name: 'あーした天気になーれ', desc: '靴を1回で3個 屋根にのせる', ok: t => (t.shoeRoofMax || 0) >= 3 },
+  { id: 'shoe', name: 'あーした天気になーれ', desc: '靴を1回で5個 屋根にのせる', ok: t => (t.shoeRoofMax || 0) >= 5 },
   { id: 'hapShoe', name: 'ナイスキャッチ', desc: '靴飛ばしでイヌが靴をキャッチする', secret: '靴飛ばしで、まれに起きる何か', ok: t => !!t.hapShoe }
 );
 
@@ -465,7 +466,7 @@ Object.assign(sfx, {
 const WEEK = ['日', '月', '火', '水', '木', '金', '土'];
 
 /* ---------- 大盛り6: 日めくりカレンダー ---------- */
-const CAL_REBUY = 30, CAL_YEN = 1000; // 1回でこの枚数以上破ったら、カレンダーの買い直し
+const CAL_REBUY = 15, CAL_YEN = 1000; // 1回でこの枚数以上破ったら、カレンダーの買い直し
 const calendar = {
   key: 'calendar', name: 'カレンダー', prompt: '破れ！', hint: 'ページを 下へ引っぱる', bg: '#efe3cf',
   bgm: song(150, [
@@ -534,7 +535,8 @@ const calendar = {
 };
 
 /* ---------- 大盛り7: 掃除機 ---------- */
-const VAC_LEGO = 5, VAC_YEN = 3000; // 1回でレゴをこの数以上吸ったら、詰まって修理
+const VAC_LEGO = 10, VAC_YEN = 2000; // 1回でレゴをこの数以上吸ったら、詰まって修理
+const VAC_SEC = 20; // 紙パックを開けて探す（1個）
 const JUNK = [
   { k: 'sock', name: '靴下', c: '#ffffff' }, { k: 'lego', name: 'レゴ', c: '#ff5a4e' }, { k: 'lego', name: 'レゴ', c: '#4f86f7' },
   { k: 'marble', name: 'ビー玉', c: '#9fd3ef' }, { k: 'ring', name: 'イヤリング', c: '#ffd23f' }, { k: 'coin', name: '小銭', c: '#c7ced5' }
@@ -546,7 +548,7 @@ const vacuum = {
     ['sawtooth', 0.04, '40 40 . 40 47 . 40 . 40 40 . 40 47 . 40 . 38 38 . 38 45 . 38 . 38 38 . 38 45 . 38 .']
   ], ['k.h.s.h.k.k.s.h.k.h.s.h.k.k.s.hh']),
   shop: [['掃除機の紙パック', '掃除機 紙パック']],
-  bill(t) { const n = t.vacuum || 0, r = t.vacuumFix || 0; return { v: n + '個', n: (r ? '掃除機の修理' + (r > 1 ? r + '回' : '') + '・' : '') + '紙パックを開けて探す', sec: n * 120, yen: r * VAC_YEN }; },
+  bill(t) { const n = t.vacuum || 0, r = t.vacuumFix || 0; return { v: n + '個', n: (r ? '掃除機の修理' + (r > 1 ? r + '回' : '') + '・' : '') + '紙パックを開けて探す', sec: n * VAC_SEC, yen: r * VAC_YEN }; },
   init() { this.n = 0; this.lego = 0; this.hx = W / 2; this.hy = H * 0.8; this.ptr = null; this.items = []; this.sucking = []; this.spawn(16); this.hum = 0; },
   started() { return this.n > 0; },
   result() { return this.n + '個'; },
@@ -597,7 +599,7 @@ const vacuum = {
 /* ---------- 大盛り8: 布団トランポリン（自分の目線） ---------- */
 const FUTON_G = 6;          // 重力（高さ1＝天井まで）
 const FUTON_WIN = 0.15;     // 着地のこの秒数前までに押せば、タイミングが合ったことにする
-const FUTON_SORRY = 10, FUTON_REDO = 20, FUTON_YEN = 3000; // 1回でこの回数以上跳ねたら、下の階へ謝りに行く／布団の打ち直し
+const FUTON_SORRY = 5, FUTON_REDO = 7, FUTON_YEN = 2000; // 1回でこの回数以上跳ねたら、下の階へ謝りに行く／布団の打ち直し
 const futon = {
   key: 'futon', name: '布団', prompt: '跳ねろ！', hint: '着地の瞬間に タップ', bg: '#f6e6c4',
   bgm: song(128, [
@@ -689,8 +691,9 @@ const futon = {
 };
 
 /* ---------- 大盛り9: 新聞を切り刻む ---------- */
-const NEWS_SPAN = 0.7; // 新聞の幅のこの割合を1回でなぞれたら、1本切れる
+const NEWS_SPAN = 0.6; // 新聞の幅のこの割合を1回でなぞれたら、1本切れる
 const NEWS_YEN = 150;  // 切った新聞（1回のステージで1部）の買い直し
+const NEWS_SEC = 30;   // 紙くずのそうじ（1本）
 const news = {
   key: 'news', name: '新聞', prompt: '切れ！', hint: 'ハサミで 新聞を横に切る', bg: '#dfe9f0',
   bgm: song(132, [
@@ -698,7 +701,7 @@ const news = {
     ['triangle', 0.13, '48 . 55 . 52 . 55 . 53 . 57 . 55 . 59 . 48 . 55 . 52 . 55 . 50 . 55 . 43 . 47 .']
   ], ['k..hs..hk..hs.hhk..hs..hk.k.s..h']),
   shop: [['ほうきとちりとり', 'ほうき ちりとり セット']],
-  bill(t) { const n = t.news || 0, p = t.newsPaper || 0; return { v: n + '本', n: (p ? 'パパの新聞を' + p + '部買い直す・' : '') + '紙くずをそうじ', sec: n * 5, yen: p * NEWS_YEN }; },
+  bill(t) { const n = t.news || 0, p = t.newsPaper || 0; return { v: n + '本', n: (p ? 'パパの新聞を' + p + '部買い直す・' : '') + '紙くずをそうじ', sec: n * NEWS_SEC, yen: p * NEWS_YEN }; },
   init() { this.n = 0; this.ptr = null; this.sx = W / 2; this.sy = H * 0.85; this.strips = []; this.slide = 0; this.reset(); },
   reset() { const g = this.geo(); this.bottom = g.top + g.h; },
   started() { return this.n > 0; },
@@ -764,6 +767,7 @@ const news = {
 
 /* ---------- 大盛り10: シャボン玉 ---------- */
 const BUBBLE_PER = 50, BUBBLE_YEN = 100; // シャボン液1本で吹ける数と値段
+const BUBBLE_SEC = 10; // 家具と床をふく（1個）
 const bubble = {
   key: 'bubble', name: 'シャボン玉', prompt: 'ふけ！', hint: '押したまま 向きを変える', bg: '#e9f3ea',
   bgm: song(120, [
@@ -771,7 +775,7 @@ const bubble = {
     ['ep', 0.1, '48 . . . 52 . . . 55 . . . 52 . . . 50 . . . 53 . . . 57 . . . 53 . . .']
   ], ['k...h.h.s...h...k...h.h.s...h.h.']),
   shop: [['シャボン玉液', 'シャボン玉 液']],
-  bill(t) { const n = t.bubble || 0, b = t.bubbleBottle || 0; return { v: n + '個', n: '家具と床をふく' + (b ? '・シャボン液 ' + b + '本' : ''), sec: n * 2, yen: b * BUBBLE_YEN }; },
+  bill(t) { const n = t.bubble || 0, b = t.bubbleBottle || 0; return { v: n + '個', n: '家具と床をふく' + (b ? '・シャボン液 ' + b + '本' : ''), sec: n * BUBBLE_SEC, yen: b * BUBBLE_YEN }; },
   init() { this.n = 0; this.blown = 0; this.bs = []; this.spots = []; this.ptr = null; this.tx = W / 2; this.ty = H * 0.4; this.acc = 0; },
   started() { return this.blown > 0; },
   result() { return this.n + '個'; },
@@ -850,9 +854,9 @@ const bubble = {
 
 STAGE_LIST.push(calendar, vacuum, futon, news, bubble);
 ZUKAN_EXTRA.push(
-  { id: 'calendar', name: '未来人', desc: 'カレンダーを1回で20日めくる', ok: t => (t.calendarMax || 0) >= 20 },
-  { id: 'vacuum', name: 'なんでも吸引', desc: '掃除機で1回で10個吸う', ok: t => (t.vacuumMax || 0) >= 10 },
+  { id: 'calendar', name: '未来人', desc: 'カレンダーを1回で25日めくる', ok: t => (t.calendarMax || 0) >= 25 },
+  { id: 'vacuum', name: 'なんでも吸引', desc: '掃除機で1回で40個吸う', ok: t => (t.vacuumMax || 0) >= 40 },
   { id: 'futon', name: '天井タッチ', desc: '布団で跳ねて天井に手が届く', ok: t => (t.futonCeil || 0) >= 1 },
-  { id: 'news', name: 'シュレッダー', desc: '新聞を1回で10本に切る', ok: t => (t.newsMax || 0) >= 10 },
-  { id: 'bubble', name: 'シャボン職人', desc: 'シャボン玉を1回で30個 家具に当てる', ok: t => (t.bubbleMax || 0) >= 30 }
+  { id: 'news', name: 'シュレッダー', desc: '新聞を1回で20本に切る', ok: t => (t.newsMax || 0) >= 20 },
+  { id: 'bubble', name: 'シャボン職人', desc: 'シャボン玉を1回で70個 家具に当てる', ok: t => (t.bubbleMax || 0) >= 70 }
 );

@@ -41,7 +41,7 @@ test('布団：着地の直前にタップし続けると、タップしない�
   assert.ok(timed.peak > idle.peak, `タイミングよく押したとき ${timed.peak}、押さないとき ${idle.peak}`);
 });
 
-test('カレンダー：1回で30枚以上破ると買い直し1,000円がかかり、図鑑「未来人」（20日）が登録される', async () => {
+test('カレンダー：1回で15枚以上破ると買い直し1,000円がかかり、25日以上で図鑑「未来人」が登録される', async () => {
   const b = await launch(); // 図鑑を空の状態から確かめるため、専用のブラウザで開く
   try {
     const g = await openOomori(b);
