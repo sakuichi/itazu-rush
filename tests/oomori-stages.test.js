@@ -9,7 +9,7 @@ before(async () => { browser = await launch(); });
 after(async () => { await browser.close(); });
 
 // 表示の形（落書きは小数1けたの m、炭酸は整数の mL、ほかは整数の個・枚）
-const UNIT = { graffiti: /^\d+\.\dm$/, soda: /^\d+mL$/, pudding: /^\d+個$/, sticker: /^\d+枚$/, shoe: /^\d+個$/ };
+const UNIT = { graffiti: /^\d+\.\dm$/, soda: /^\d+mL$/, pudding: /^\d+個$/, sticker: /^\d+枚$/, shoe: /^\d+個$/, calendar: /^\d+日$/, vacuum: /^\d+個$/, futon: /^\d+回$/, news: /^\d+本$/, bubble: /^\d+個$/ };
 
 for (const key of NEW_KEYS) {
   test(`${key}（${NEW_NAMES[key]}）：操作すると数字が増え、時間切れのあとは増えない`, async () => {
@@ -21,8 +21,8 @@ for (const key of NEW_KEYS) {
   });
 }
 
-// 炭酸・プリンは1つでも損害が出る。落書き・シールは段階制、靴飛ばしは屋根なら0円（犬小屋で損害が出るのは oomori-shoe.test.js）
-const MUST_COST = ['soda', 'pudding'];
+// 炭酸・プリン・新聞・シャボン玉は1つでも損害が出る。落書き・シール・カレンダー・掃除機・布団は段階制、靴飛ばしは屋根なら0円（犬小屋で損害が出るのは oomori-shoe.test.js）
+const MUST_COST = ['soda', 'pudding', 'news', 'bubble'];
 for (const key of NEW_KEYS) {
   test(`${key}（${NEW_NAMES[key]}）：結果に行が出て、損害額が${MUST_COST.includes(key) ? '0円より大きい' : '数字で出る'}`, async () => {
     const g = await openOomori(browser);

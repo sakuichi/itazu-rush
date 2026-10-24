@@ -12,11 +12,11 @@ const OLD_PAGE = fileUrl(path.join(ROOT, 'index.html'));
 const SITE = 'https://sakuichi.github.io/itazu-rush/';
 const OOMORI_SITE = SITE + 'oomori/';
 
-// 既存10種＋新規5種（この順で #chips に並ぶ）
+// 既存10種＋新規10種（第1弾5種・第2弾5種。この順で #chips に並ぶ）
 const OLD_KEYS = ['tissue', 'toilet', 'shoji', 'paste', 'shampoo', 'mud', 'toys', 'puddle', 'hose', 'elev'];
-const NEW_KEYS = ['graffiti', 'soda', 'pudding', 'sticker', 'shoe'];
+const NEW_KEYS = ['graffiti', 'soda', 'pudding', 'sticker', 'shoe', 'calendar', 'vacuum', 'futon', 'news', 'bubble'];
 const KEYS = OLD_KEYS.concat(NEW_KEYS);
-const NEW_NAMES = { graffiti: '落書き', soda: '炭酸', pudding: 'プリン', sticker: 'シール', shoe: '靴飛ばし' };
+const NEW_NAMES = { graffiti: '落書き', soda: '炭酸', pudding: 'プリン', sticker: 'シール', shoe: '靴飛ばし', calendar: 'カレンダー', vacuum: '掃除機', futon: '布団', news: '新聞', bubble: 'シャボン玉' };
 
 // ページを開く（既存版の helpers.open と同じ形）。errors にはページ内のエラーがたまる
 async function openPage(browser, url, { query = '', width = 390, height = 844 } = {}) {
@@ -34,7 +34,7 @@ async function openOomori(browser, opts) {
 }
 const openOld = (browser, opts) => openPage(browser, OLD_PAGE, opts);
 
-// 新規5種の操作（人の指の動きをマウスでまねる）
+// 新規の操作（人の指の動きをマウスでまねる）
 const NEW_ACTS = {
   // 画面の中ほどを押したまま、ジグザグに自由になぞる
   async graffiti(p, W, H) {
@@ -64,6 +64,36 @@ const NEW_ACTS = {
   async shoe(p, W, H) {
     const m = p.mouse;
     for (let i = 0; i < 3; i++) { await m.move(W / 2, H * 0.8); await m.down(); await m.move(W / 2, H * 0.55, { steps: 2 }); await m.up(); await sleep(600); }
+  },
+  // カレンダーのページを押して、下へ引っぱる（1回で1枚）を6回
+  async calendar(p, W, H) {
+    const m = p.mouse;
+    for (let i = 0; i < 6; i++) { await m.move(W / 2, H * 0.4); await m.down(); await m.move(W / 2 + (i % 3 - 1) * 20, H * 0.4 + 120, { steps: 5 }); await m.up(); await sleep(60); }
+  },
+  // 押したまま、画面を左右に何往復かなぞって、床の物を吸う
+  async vacuum(p, W, H) {
+    const m = p.mouse; await m.move(W * 0.1, H * 0.22); await m.down();
+    for (let i = 0; i < 4; i++) { await m.move(W * 0.9, H * (0.22 + i * 0.13), { steps: 12 }); await m.move(W * 0.1, H * (0.28 + i * 0.13), { steps: 12 }); }
+    await m.up();
+  },
+  // 1回タップして跳び始め、着地の直前を狙って4回タップする
+  async futon(p, W, H) {
+    const m = p.mouse; await m.click(W / 2, H * 0.6);
+    for (let i = 0; i < 4; i++) {
+      const ok = await p.waitForFunction(() => { const st = window.__itazu.st; return st.key !== 'futon' || st.landIn() < 0.07; }, { polling: 'raf', timeout: 3000 }).then(() => p.evaluate(() => window.__itazu.st.key === 'futon')).catch(() => false);
+      if (!ok) return; // 時間切れで次のステージに変わった
+      await m.click(W / 2, H * 0.6); await sleep(120);
+    }
+  },
+  // 新聞を下のほうから横に4回なぞる（少しずつ上へずらす）
+  async news(p, W, H) {
+    const m = p.mouse;
+    for (const y of [0.7, 0.62, 0.55, 0.48]) { await m.move(W * 0.1, H * y); await m.down(); await m.move(W * 0.9, H * y, { steps: 15 }); await m.up(); }
+  },
+  // 押したまま、左上の食器棚から右のテレビへ向きを変えながら吹く
+  async bubble(p, W, H) {
+    const m = p.mouse; await m.move(W * 0.2, H * 0.45); await m.down();
+    await m.move(W * 0.8, H * 0.4, { steps: 30 }); await sleep(800); await m.up(); await sleep(600);
   }
 };
 const OACTS = Object.assign({}, ACTS, NEW_ACTS);

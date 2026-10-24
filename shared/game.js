@@ -134,6 +134,15 @@ function buildResult() {
 /* ---------- いたずら図鑑（実績。端末に保存する） ---------- */
 // ok(tot, g) が true になったら登録。g = { natural: 最後まで遊んだ, loop: 周回モード, count: 遊んだ本数, played, res }
 // secret: 達成するまで条件も伏せる
+// 大盛り（ランダム）の「いたずらっ子」は通算で判定するので、遊んだ種類を端末に覚えておく（CONF.store + 'played'）
+let playedAll = new Set();
+if (RANDOM) try { playedAll = new Set(JSON.parse(localStorage.getItem(CONF.store + 'played') || '[]')); } catch (e) { playedAll = new Set(); }
+function rememberPlayed() {
+  if (!RANDOM) return;
+  try { for (const k of JSON.parse(localStorage.getItem(CONF.store + 'played') || '[]')) playedAll.add(k); } catch (e) {} // 別のタブで遊んだ分も消さない
+  for (const s of NORMAL) if (played.has(s.key)) playedAll.add(s.key);
+  try { localStorage.setItem(CONF.store + 'played', JSON.stringify([...playedAll])); } catch (e) {}
+}
 const ZUKAN = [
   { id: 'tissue', name: 'ティッシュ全部出す係', desc: 'ティッシュを1回で35枚出す', ok: t => (t.tissueMax || 0) >= 35 },
   { id: 'roll', name: 'ロール使い切り', desc: 'トイレットペーパーを1回で25m伸ばす', ok: t => (t.tpMax || 0) >= 25 },
@@ -156,7 +165,7 @@ const ZUKAN = [
   { id: 'broke', name: '故障', desc: 'エレベーターを故障させる', secret: 'エレベーターで、ごくまれに起きる何か', ok: t => (t.broke || 0) >= 1 },
   { id: 'nopush', name: '押しちゃった', desc: '押すなボタンを押す', ok: t => (t.nopush || 0) >= 1 },
   { id: 'nopushLegend', name: '伝説の連打', desc: '押すなボタンを1回で40回押す', ok: t => (t.nopushMax || 0) >= 40 },
-  { id: 'round', name: 'いたずらっ子', desc: RANDOM ? '全' + N + '種のいたずらを、1回のゲームで全部やる' : '全' + N + '種のいたずらを1周する（どちらのモードでも）', ok: (t, g) => RANDOM ? NORMAL.every(s => g.played.has(s.key)) : g.count >= N },
+  { id: 'round', name: 'いたずらっ子', desc: RANDOM ? '全' + N + '種のいたずらを、全部やる（何回かに分けてもよい）' : '全' + N + '種のいたずらを1周する（どちらのモードでも）', ok: (t, g) => RANDOM ? NORMAL.every(s => playedAll.has(s.key)) : g.count >= N },
   { id: 'clear', name: 'やり切った', desc: CONF.modeName + 'を最後まで遊ぶ', ok: (t, g) => g.loop && g.natural },
   { id: 'goodkid', name: 'いい子', desc: CONF.modeName + 'を怒られ度0%で終える', secret: CONF.modeName + 'を、ある判定で終える', ok: (t, g) => g.loop && g.natural && g.res.angry === 0 },
   { id: 'legend', name: '伝説のいたずらっ子', desc: '判定「伝説のいたずらっ子」をもらう', ok: (t, g) => tierOf(g.res.angry) === 5 },
@@ -176,6 +185,7 @@ function unlock(ids) { // 新しく登録された項目の名前を返す
   return got;
 }
 function checkZukan(natural) {
+  rememberPlayed();
   const g = { natural, loop: gameMode === 'loop', count, played, res };
   return unlock(ZUKAN.filter(z => { try { return z.ok(tot, g); } catch (e) { return false; } }).map(z => z.id));
 }

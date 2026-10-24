@@ -8,7 +8,7 @@ let browser;
 before(async () => { browser = await launch(); });
 after(async () => { await browser.close(); });
 
-test('ランダム20本：1回のゲームの20本に、全15種が必ず1回は入る（50回取り出して確かめる）', async () => {
+test('ランダム20本：1回のゲームの20本に、全20種が必ず1回は入る（50回取り出して確かめる）', async () => {
   const { page } = await openOomori(browser);
   const orders = await page.evaluate(() => Array.from({ length: 50 }, () => window.__itazu.sampleOrder(20)));
   orders.forEach((o, i) => {

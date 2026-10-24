@@ -452,3 +452,407 @@ ZUKAN_EXTRA.push(
   { id: 'shoe', name: 'あーした天気になーれ', desc: '靴を1回で3個 屋根にのせる', ok: t => (t.shoeRoofMax || 0) >= 3 },
   { id: 'hapShoe', name: 'ナイスキャッチ', desc: '靴飛ばしでイヌが靴をキャッチする', secret: '靴飛ばしで、まれに起きる何か', ok: t => !!t.hapShoe }
 );
+
+/* ===== 第2弾（2026-10-24 追加） ===== */
+Object.assign(sfx, {
+  rip() { noise(0.18, rnd(1800, 2600), 0.6, 0.3); },
+  suck() { tone(rnd(500, 700), 1400, 0.12, 0.08, 'sine'); noise(0.1, 3000, 0.8, 0.08, 'highpass'); },
+  boing(k) { tone(160 + k * 200, 320 + k * 400, 0.18, 0.2, 'sine'); },
+  snip() { noise(0.04, 5000, 2, 0.2, 'highpass'); tone(2400, 1800, 0.03, 0.05, 'square'); },
+  blub() { tone(rnd(700, 1100), rnd(1300, 1700), 0.06, 0.05, 'sine'); },
+  popb() { noise(0.04, rnd(3000, 4500), 2, 0.12, 'highpass'); }
+});
+const WEEK = ['日', '月', '火', '水', '木', '金', '土'];
+
+/* ---------- 大盛り6: 日めくりカレンダー ---------- */
+const CAL_REBUY = 30, CAL_YEN = 1000; // 1回でこの枚数以上破ったら、カレンダーの買い直し
+const calendar = {
+  key: 'calendar', name: 'カレンダー', prompt: '破れ！', hint: 'ページを 下へ引っぱる', bg: '#efe3cf',
+  bgm: song(150, [
+    ['pluck', 0.09, '72 . 76 . 79 . 76 . 72 . 76 . 79 - . . 74 . 77 . 81 . 77 . 74 . 77 . 81 - . .'],
+    ['triangle', 0.14, '48 . . . 55 . . . 48 . . . 55 . . . 50 . . . 57 . . . 50 . . . 57 . . .']
+  ], ['k.h.s.h.k.h.s.hhk.h.s.h.k.h.s.h.']),
+  shop: [['日めくりカレンダー', '日めくりカレンダー']],
+  bill(t) { const n = t.calendar || 0, r = t.calendarRebuy || 0; return { v: n + '日', n: (r ? 'カレンダーの買い直し' + (r > 1 ? r + '冊' : '') + '・' : '') + '破った紙を拾う', sec: n * 3, yen: r * CAL_YEN }; },
+  init() { this.n = 0; this.day = new Date(); this.ptr = {}; this.flying = []; this.pile = []; this.newYear = 0; },
+  started() { return this.n > 0; },
+  result() { return this.n + '日'; },
+  commit(tot) { add(tot, 'calendar', this.n); add(tot, 'calendarRebuy', this.n >= CAL_REBUY ? 1 : 0); mx(tot, 'calendarMax', this.n); },
+  geo() { const s = SC(), w = Math.min(W * 0.62, 250 * s), h = w * 1.25; return { s, x: (W - w) / 2, y: H * 0.2, w, h }; },
+  down(id, x, y) { this.ptr[id] = { x0: x, y0: y, x, y }; },
+  move(id, x, y) {
+    const p = this.ptr[id]; if (!p || p.done) return;
+    p.x = x; p.y = y;
+    if (y - p.y0 > 40 * SC()) { p.done = true; this.tear(x - p.x0); } // 少し下へ引っぱれば1枚。1回なぞって1枚（指を離すまで次は破れない）
+  },
+  up(id) { if (id == null) this.ptr = {}; else delete this.ptr[id]; },
+  tear(dx) {
+    const g = this.geo();
+    const dir = dx < 0 ? -1 : 1; // まっすぐ下に引いても、どちらかへ飛ぶ
+    this.flying.push({ d: new Date(this.day), x: g.x, y: g.y, vx: dir * rnd(150, 300), vy: rnd(-80, 40), r: 0, vr: dir * rnd(2, 5) });
+    const y0 = this.day.getFullYear(); this.day.setDate(this.day.getDate() + 1);
+    if (this.day.getFullYear() !== y0) this.newYear = 1.6;
+    if (scoring()) this.n++;
+    sfx.rip();
+  },
+  update(dt) {
+    this.newYear = Math.max(0, this.newYear - dt);
+    for (let i = this.flying.length - 1; i >= 0; i--) {
+      const f = this.flying[i]; f.vy += 900 * dt; f.x += f.vx * dt; f.y += f.vy * dt; f.r += f.vr * dt;
+      if (f.y > H * 0.78) { this.pile.push({ x: f.x + rnd(-20, 20), r: f.r, sun: f.d.getDay() === 0 }); if (this.pile.length > 120) this.pile.shift(); this.flying.splice(i, 1); }
+    }
+  },
+  page(d, x, y, w, h) {
+    const s = SC(), sun = d.getDay() === 0, sat = d.getDay() === 6;
+    ctx.fillStyle = PAPER; ctx.fillRect(x, y, w, h); ctx.lineWidth = 3; ctx.strokeStyle = INK; ctx.strokeRect(x, y, w, h);
+    ctx.fillStyle = sun ? HOT : sat ? '#4f86f7' : INK; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = `${Math.round(w * 0.12)}px ${DISPLAY}`; ctx.fillText(d.getFullYear() + '年 ' + (d.getMonth() + 1) + '月', x + w / 2, y + h * 0.14);
+    ctx.font = `${Math.round(w * 0.5)}px ${DISPLAY}`; ctx.fillText(d.getDate(), x + w / 2, y + h * 0.52);
+    ctx.font = `${Math.round(w * 0.11)}px ${DISPLAY}`; ctx.fillText(WEEK[d.getDay()] + '曜日', x + w / 2, y + h * 0.86);
+    ctx.textAlign = 'left';
+  },
+  draw() {
+    const g = this.geo(), s = g.s;
+    ctx.fillStyle = this.bg; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#c9a77c'; ctx.fillRect(0, H * 0.8, W, H * 0.2); ctx.fillStyle = INK; ctx.fillRect(0, H * 0.8 - 2, W, 3); // 床
+    for (const p of this.pile) { ctx.save(); ctx.translate(p.x, H * 0.84); ctx.rotate(p.r); ctx.fillStyle = PAPER; ctx.fillRect(-18 * s, -12 * s, 36 * s, 24 * s); ctx.strokeStyle = INK; ctx.lineWidth = 2; ctx.strokeRect(-18 * s, -12 * s, 36 * s, 24 * s); ctx.restore(); }
+    // 次のページ（下の束）と、今のページ。引っぱっている間は、引っぱった方向にめくれる
+    ctx.fillStyle = '#d9d2c3'; ctx.fillRect(g.x + 4 * s, g.y + 6 * s, g.w, g.h);
+    const p = Object.values(this.ptr)[0];
+    const next = new Date(this.day); next.setDate(next.getDate() + 1);
+    this.page(next, g.x, g.y, g.w, g.h);
+    ctx.save();
+    if (p && !p.done) { const dx = p.x - p.x0, dy = Math.max(0, p.y - p.y0); ctx.translate(g.x + g.w / 2, g.y); ctx.rotate(clamp(dx / 300, -0.35, 0.35) * Math.min(1, dy / (40 * s))); ctx.scale(1, 1 + Math.min(0.1, dy / 400)); ctx.translate(-(g.x + g.w / 2), -g.y); }
+    this.page(this.day, g.x, g.y, g.w, g.h);
+    ctx.restore();
+    rr(g.x - 8 * s, g.y - 18 * s, g.w + 16 * s, 24 * s, 6 * s); ctx.fillStyle = '#3a2a22'; ctx.fill(); // とじ具
+    ctx.beginPath(); ctx.arc(W / 2, g.y - 30 * s, 6 * s, 0, Math.PI * 2); ctx.fillStyle = INK; ctx.fill(); // くぎ
+    for (const f of this.flying) { ctx.save(); ctx.translate(f.x + g.w / 2, f.y + g.h / 2); ctx.rotate(f.r); ctx.scale(0.45, 0.45); this.page(f.d, -g.w / 2, -g.h / 2, g.w, g.h); ctx.restore(); }
+    if (this.newYear > 0) bigText('来年に突入！', W / 2, H * 0.12, Math.round(34 * s), HOT, PAPER, W * 0.9);
+  },
+  drawHint(t) { const g = this.geo(), p = (t * 1.3) % 1; finger(g.x + g.w * 0.75 + p * 50, g.y + g.h * 0.75 + p * 90, 0.9); }
+};
+
+/* ---------- 大盛り7: 掃除機 ---------- */
+const VAC_LEGO = 5, VAC_YEN = 3000; // 1回でレゴをこの数以上吸ったら、詰まって修理
+const JUNK = [
+  { k: 'sock', name: '靴下', c: '#ffffff' }, { k: 'lego', name: 'レゴ', c: '#ff5a4e' }, { k: 'lego', name: 'レゴ', c: '#4f86f7' },
+  { k: 'marble', name: 'ビー玉', c: '#9fd3ef' }, { k: 'ring', name: 'イヤリング', c: '#ffd23f' }, { k: 'coin', name: '小銭', c: '#c7ced5' }
+];
+const vacuum = {
+  key: 'vacuum', name: '掃除機', prompt: '吸え！', hint: '掃除機を 動かして吸う', bg: '#e8d6b8',
+  bgm: song(140, [
+    ['square', 0.04, '64 . 67 . 71 . 67 . 64 . 67 . 72 - . . 62 . 66 . 69 . 66 . 62 . 66 . 71 - . .'],
+    ['sawtooth', 0.04, '40 40 . 40 47 . 40 . 40 40 . 40 47 . 40 . 38 38 . 38 45 . 38 . 38 38 . 38 45 . 38 .']
+  ], ['k.h.s.h.k.k.s.h.k.h.s.h.k.k.s.hh']),
+  shop: [['掃除機の紙パック', '掃除機 紙パック']],
+  bill(t) { const n = t.vacuum || 0, r = t.vacuumFix || 0; return { v: n + '個', n: (r ? '掃除機の修理' + (r > 1 ? r + '回' : '') + '・' : '') + '紙パックを開けて探す', sec: n * 120, yen: r * VAC_YEN }; },
+  init() { this.n = 0; this.lego = 0; this.hx = W / 2; this.hy = H * 0.8; this.ptr = null; this.items = []; this.sucking = []; this.spawn(16); this.hum = 0; },
+  started() { return this.n > 0; },
+  result() { return this.n + '個'; },
+  commit(tot) { add(tot, 'vacuum', this.n); add(tot, 'vacuumFix', this.lego >= VAC_LEGO ? 1 : 0); mx(tot, 'vacuumMax', this.n); },
+  spawn(k) { for (let i = 0; i < k; i++) { const j = JUNK[Math.floor(Math.random() * JUNK.length)]; this.items.push({ ...j, x: rnd(W * 0.08, W * 0.92), y: rnd(H * 0.18, H * 0.72), r: rnd(0, 6) }); } },
+  down(id, x, y) { if (this.ptr == null) this.ptr = id; this.tx = x; this.ty = y; },
+  move(id, x, y) { if (id === this.ptr) { this.tx = x; this.ty = y; } },
+  up(id) { if (id == null || id === this.ptr) this.ptr = null; },
+  update(dt) {
+    const s = SC();
+    if (this.ptr != null) { // ヘッドは指の位置へ少し遅れてついてくる
+      const k = 1 - Math.exp(-dt * 14); this.hx += (this.tx - this.hx) * k; this.hy += (this.ty - 30 * s - this.hy) * k;
+      this.hum -= dt; if (this.hum <= 0) { noise(0.12, 900, 0.6, 0.05, 'bandpass'); this.hum = 0.1; }
+      for (let i = this.items.length - 1; i >= 0; i--) {
+        const it = this.items[i];
+        if (Math.abs(it.x - this.hx) < 46 * s && Math.abs(it.y - this.hy) < 24 * s) {
+          this.items.splice(i, 1); this.sucking.push({ ...it, t: 0 }); sfx.suck();
+          if (scoring()) { this.n++; if (it.k === 'lego') this.lego++; }
+        }
+      }
+      if (this.items.length < 6) this.spawn(8);
+    }
+    for (let i = this.sucking.length - 1; i >= 0; i--) { const q = this.sucking[i]; q.t += dt * 5; q.x += (this.hx - q.x) * 0.3; q.y += (this.hy - q.y) * 0.3; if (q.t >= 1) this.sucking.splice(i, 1); }
+  },
+  item(it, z) {
+    const s = SC() * z; ctx.save(); ctx.translate(it.x, it.y); ctx.rotate(it.r); ctx.fillStyle = it.c; ctx.strokeStyle = INK; ctx.lineWidth = 2;
+    if (it.k === 'sock') { ctx.beginPath(); ctx.moveTo(-8 * s, -14 * s); ctx.lineTo(4 * s, -14 * s); ctx.lineTo(4 * s, 4 * s); ctx.lineTo(14 * s, 6 * s); ctx.lineTo(14 * s, 14 * s); ctx.lineTo(-8 * s, 14 * s); ctx.closePath(); ctx.fill(); ctx.stroke(); }
+    else if (it.k === 'lego') { rr(-11 * s, -7 * s, 22 * s, 14 * s, 2 * s); ctx.fill(); ctx.stroke(); for (const dx of [-5, 5]) { ctx.beginPath(); ctx.arc(dx * s, -1 * s, 3 * s, 0, Math.PI * 2); ctx.stroke(); } }
+    else if (it.k === 'ring') { ctx.beginPath(); ctx.arc(0, 0, 7 * s, 0, Math.PI * 2); ctx.lineWidth = 4 * s; ctx.strokeStyle = it.c; ctx.stroke(); ctx.beginPath(); ctx.arc(0, -8 * s, 3 * s, 0, Math.PI * 2); ctx.fillStyle = '#ff9ecf'; ctx.fill(); }
+    else { ctx.beginPath(); ctx.arc(0, 0, (it.k === 'coin' ? 8 : 6) * s, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }
+    ctx.restore();
+  },
+  draw() {
+    const s = SC();
+    ctx.fillStyle = this.bg; ctx.fillRect(0, 0, W, H);
+    ctx.strokeStyle = 'rgba(120,80,40,.25)'; ctx.lineWidth = 2; for (let y = 0; y < H; y += 46 * s) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); } // フローリング
+    for (const it of this.items) this.item(it, 1.5);
+    for (const q of this.sucking) this.item(q, 1.5 * (1 - q.t));
+    // ホースと本体（画面の下）
+    ctx.strokeStyle = INK; ctx.lineWidth = 10 * s; ctx.beginPath(); ctx.moveTo(W / 2, H + 10); ctx.quadraticCurveTo(W / 2, H * 0.9, this.hx, this.hy + 30 * s); ctx.stroke();
+    ctx.strokeStyle = '#7a8a99'; ctx.lineWidth = 6 * s; ctx.stroke();
+    rr(this.hx - 48 * s, this.hy - 14 * s, 96 * s, 28 * s, 8 * s); ctx.fillStyle = '#4f86f7'; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = INK; ctx.stroke();
+    if (this.ptr != null) { ctx.fillStyle = 'rgba(255,255,255,.5)'; for (let i = 0; i < 3; i++) { const a = (clock * 6 + i) % 1; ctx.beginPath(); ctx.arc(this.hx + (i - 1) * 24 * s, this.hy - 20 * s - a * 14 * s, 3 * s, 0, Math.PI * 2); ctx.fill(); } }
+  },
+  drawHint(t) { const p = (t * 0.8) % 1; finger(W * (0.3 + p * 0.4), H * 0.8 - p * H * 0.3, 0.9); }
+};
+
+/* ---------- 大盛り8: 布団トランポリン（自分の目線） ---------- */
+const FUTON_G = 6;          // 重力（高さ1＝天井まで）
+const FUTON_WIN = 0.15;     // 着地のこの秒数前までに押せば、タイミングが合ったことにする
+const FUTON_SORRY = 10, FUTON_REDO = 20, FUTON_YEN = 3000; // 1回でこの回数以上跳ねたら、下の階へ謝りに行く／布団の打ち直し
+const futon = {
+  key: 'futon', name: '布団', prompt: '跳ねろ！', hint: '着地の瞬間に タップ', bg: '#f6e6c4',
+  bgm: song(128, [
+    ['wob', 0.11, '60 . . 67 . . 72 . 71 . . 67 . . 64 . 60 . . 67 . . 72 . 74 . . 72 . . . .'],
+    ['triangle', 0.13, '36 . . . 43 . . . 36 . . . 43 . . . 41 . . . 48 . . . 43 . . . 43 . . .']
+  ], ['k...s...k...s...k...s...k.k.s...']),
+  shop: [['敷き布団', '敷き布団']],
+  bill(t) {
+    const n = t.futon || 0, c = t.futonCeil || 0, sorry = t.futonSorry || 0, redo = t.futonRedo || 0;
+    return { v: n + '回', n: (redo ? '布団の打ち直し' + (redo > 1 ? redo + '回' : '') + '・' : '') + (sorry ? '下の階へ謝りに行く' : 'シーツを直す') + (c ? '・天井の手あとふき' : ''), sec: (t.futonSec || 0) + c * 60, yen: redo * FUTON_YEN };
+  },
+  init() { this.n = 0; this.ceil = 0; this.h = 0; this.v = 0; this.peak = 0.25; this.tap = -9; this.say = ''; this.sayT = 0; this.hand = 0; this.go = false; this.early = false; this.landT = -9; },
+  started() { return this.n > 0; },
+  result() { return this.n + '回'; },
+  commit(tot) { // 謝りに行く（15分）なら、シーツを直す時間（1回10秒）は数えない
+    add(tot, 'futon', this.n); add(tot, 'futonCeil', this.ceil); add(tot, 'futonSorry', this.n >= FUTON_SORRY ? 1 : 0); add(tot, 'futonRedo', this.n >= FUTON_REDO ? 1 : 0);
+    add(tot, 'futonSec', this.n >= FUTON_SORRY ? 900 : this.n * 10);
+  },
+  down() { // 最初のタップで跳び始める。そのあとは着地の直前（FUTON_WIN 秒以内）に押すと高く跳ぶ
+    if (!this.go) { this.go = true; this.v = Math.sqrt(2 * FUTON_G * this.peak); this.tap = clock; return; }
+    if (clock - this.landT < 0.2) { this.say = 'おそい！'; this.sayT = 0.6; return; } // 着地したあとに押した
+    if (this.landIn() > FUTON_WIN) this.early = true; // 早すぎ（連打もここに入る）
+    else this.tap = clock;
+  },
+  landIn() { return this.go ? (this.v + Math.sqrt(this.v * this.v + 2 * FUTON_G * this.h)) / FUTON_G : Infinity; }, // 着地までの秒
+  move() {}, up() {},
+  update(dt) {
+    this.sayT = Math.max(0, this.sayT - dt); this.hand = Math.max(0, this.hand - dt);
+    if (!this.go) return;
+    this.v -= FUTON_G * dt; this.h += this.v * dt;
+    if (this.h >= 1 && this.v > 0) { this.h = 1; this.v = 0; this.hand = 0.5; sfx.thud(); if (scoring()) this.ceil++; this.say = '天井タッチ！'; this.sayT = 0.8; }
+    if (this.h <= 0 && this.v < 0) { // 着地。直前に押していれば高くなり、押していなければ低くなる
+      this.h = 0;
+      const e = clock - this.tap;
+      if (!this.early && e >= 0 && e <= FUTON_WIN) { const q = 1 - e / FUTON_WIN; this.peak = Math.min(1.1, this.peak + 0.12 + 0.18 * q); this.say = q > 0.6 ? 'ぴったり！' : 'いいね！'; }
+      else { this.peak = Math.max(0.15, this.peak * 0.75); this.say = this.early ? 'はやい！' : ''; }
+      this.sayT = 0.6; this.tap = -9; this.early = false; this.landT = clock;
+      this.v = Math.sqrt(2 * FUTON_G * this.peak);
+      if (scoring()) this.n++;
+      sfx.boing(Math.min(1, this.peak));
+    }
+  },
+  photo(x, y, w, h, who) { // 額に入った写真。顔の色と形は、ハプニングのイヌ（泥んこ足）・ネコ（障子）に合わせる
+    const s = SC(), cx = x + w / 2, cy = y + h * 0.56, R = Math.min(w, h) * 0.3;
+    rr(x, y, w, h, 4 * s); ctx.fillStyle = '#b97a45'; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = INK; ctx.stroke();
+    ctx.fillStyle = who === 'dog' ? '#cfe8c4' : '#ffe1ea'; ctx.fillRect(x + 7 * s, y + 7 * s, w - 14 * s, h - 14 * s); ctx.strokeRect(x + 7 * s, y + 7 * s, w - 14 * s, h - 14 * s);
+    if (who === 'dog') {
+      ctx.fillStyle = '#e8c39e'; ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#8a5a32'; for (const k of [-1, 1]) { ctx.beginPath(); ctx.ellipse(cx + k * R * 0.95, cy - R * 0.1, R * 0.32, R * 0.6, -k * 0.3, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); } // たれ耳
+      ctx.fillStyle = '#f6e3cc'; ctx.beginPath(); ctx.ellipse(cx, cy + R * 0.35, R * 0.45, R * 0.32, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = INK; for (const k of [-1, 1]) { ctx.beginPath(); ctx.arc(cx + k * R * 0.38, cy - R * 0.15, R * 0.1, 0, Math.PI * 2); ctx.fill(); }
+      ctx.beginPath(); ctx.ellipse(cx, cy + R * 0.22, R * 0.16, R * 0.11, 0, 0, Math.PI * 2); ctx.fill(); // 鼻
+      ctx.fillStyle = '#ff8fa3'; ctx.beginPath(); ctx.ellipse(cx, cy + R * 0.58, R * 0.12, R * 0.16, 0, 0, Math.PI * 2); ctx.fill(); // 舌
+    } else {
+      ctx.fillStyle = '#f2a65a';
+      for (const k of [-1, 1]) { ctx.beginPath(); ctx.moveTo(cx + k * R * 0.9, cy - R * 0.3); ctx.lineTo(cx + k * R * 0.6, cy - R * 1.3); ctx.lineTo(cx + k * R * 0.1, cy - R * 0.7); ctx.closePath(); ctx.fill(); ctx.stroke(); }
+      ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = INK; for (const k of [-1, 1]) { ctx.beginPath(); ctx.ellipse(cx + k * R * 0.38, cy - R * 0.1, R * 0.1, R * 0.17, 0, 0, Math.PI * 2); ctx.fill(); }
+      ctx.fillStyle = '#ff8fa3'; ctx.beginPath(); ctx.moveTo(cx - R * 0.1, cy + R * 0.15); ctx.lineTo(cx + R * 0.1, cy + R * 0.15); ctx.lineTo(cx, cy + R * 0.28); ctx.closePath(); ctx.fill();
+      ctx.lineWidth = 1.5; ctx.beginPath(); for (const k of [-1, 1]) for (const dy of [0.2, 0.35]) { ctx.moveTo(cx + k * R * 0.25, cy + R * dy); ctx.lineTo(cx + k * R * 0.85, cy + R * (dy + (dy - 0.27))); } ctx.stroke(); // ひげ
+    }
+    ctx.lineWidth = 3;
+  },
+  draw() {
+    const s = SC(), cam = this.h * H * 0.75; // 高く跳ぶほど部屋が下へ流れ、天井が近づく
+    ctx.fillStyle = this.bg; ctx.fillRect(0, 0, W, H);
+    ctx.save(); ctx.translate(0, cam);
+    const ceilY = -H * 0.55;
+    ctx.fillStyle = '#fffaf0'; ctx.fillRect(0, ceilY - H, W, H); ctx.fillStyle = INK; ctx.fillRect(0, ceilY - 2, W, 4); // 天井
+    ctx.beginPath(); ctx.arc(W / 2, ceilY + 16 * s, 26 * s, 0, Math.PI); ctx.fillStyle = POP; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = INK; ctx.stroke(); // 電灯
+    this.photo(W * 0.1, H * 0.06, W * 0.34, H * 0.2, 'dog'); this.photo(W * 0.56, H * 0.1, W * 0.34, H * 0.2, 'cat'); // 壁の写真（泥んこ足のイヌと、障子のネコ）
+    ctx.fillStyle = '#ffffff'; rr(-10, H * 0.72, W + 20, H * 0.4, 30 * s); ctx.fill(); ctx.stroke(); // 布団
+    ctx.fillStyle = '#4f86f7'; for (let x = 0; x < W; x += 40 * s) ctx.fillRect(x, H * 0.76, 20 * s, 6 * s);
+    ctx.restore();
+    if (this.hand > 0) { ctx.globalAlpha = this.hand * 2; ctx.fillStyle = '#f2c9a0'; for (const x of [0.35, 0.65]) { ctx.beginPath(); ctx.arc(W * x, H * 0.08, 22 * s, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); } ctx.globalAlpha = 1; }
+    // 着地までの目安：輪が縮んで、中の円と重なった瞬間が着地
+    if (this.go && this.v < 0) {
+      const tl = this.landIn();
+      const r = 28 * s + Math.min(1, tl / 0.6) * 70 * s;
+      ctx.beginPath(); ctx.arc(W / 2, H * 0.6, 28 * s, 0, Math.PI * 2); ctx.fillStyle = 'rgba(255,90,78,.25)'; ctx.fill();
+      ctx.beginPath(); ctx.arc(W / 2, H * 0.6, r, 0, Math.PI * 2); ctx.lineWidth = 4; ctx.strokeStyle = HOT; ctx.stroke();
+    }
+    // 高さのメーター
+    rr(W - 22 * s, H * 0.2, 10 * s, H * 0.5, 5 * s); ctx.fillStyle = 'rgba(35,27,46,.15)'; ctx.fill();
+    rr(W - 22 * s, H * 0.7 - H * 0.5 * Math.min(1, this.h), 10 * s, H * 0.5 * Math.min(1, this.h), 5 * s); ctx.fillStyle = HOT; ctx.fill();
+    if (this.sayT > 0 && this.say) bigText(this.say, W / 2, H * 0.45, Math.round(34 * s), HOT, PAPER, W * 0.8);
+  },
+  drawHint(t) { tapHint(W / 2, H * 0.6, t, 1.6); }
+};
+
+/* ---------- 大盛り9: 新聞を切り刻む ---------- */
+const NEWS_SPAN = 0.7; // 新聞の幅のこの割合を1回でなぞれたら、1本切れる
+const NEWS_YEN = 150;  // 切った新聞（1回のステージで1部）の買い直し
+const news = {
+  key: 'news', name: '新聞', prompt: '切れ！', hint: 'ハサミで 新聞を横に切る', bg: '#dfe9f0',
+  bgm: song(132, [
+    ['bell', 0.06, '84 . . 79 . . 76 . 77 . . 81 . . 79 . 84 . . 79 . . 76 . 74 . . 77 . . 72 .'],
+    ['triangle', 0.13, '48 . 55 . 52 . 55 . 53 . 57 . 55 . 59 . 48 . 55 . 52 . 55 . 50 . 55 . 43 . 47 .']
+  ], ['k..hs..hk..hs.hhk..hs..hk.k.s..h']),
+  shop: [['ほうきとちりとり', 'ほうき ちりとり セット']],
+  bill(t) { const n = t.news || 0, p = t.newsPaper || 0; return { v: n + '本', n: (p ? 'パパの新聞を' + p + '部買い直す・' : '') + '紙くずをそうじ', sec: n * 5, yen: p * NEWS_YEN }; },
+  init() { this.n = 0; this.ptr = null; this.sx = W / 2; this.sy = H * 0.85; this.strips = []; this.slide = 0; this.reset(); },
+  reset() { const g = this.geo(); this.bottom = g.top + g.h; },
+  started() { return this.n > 0; },
+  result() { return this.n + '本'; },
+  commit(tot) { add(tot, 'news', this.n); add(tot, 'newsPaper', this.n > 0 ? 1 : 0); mx(tot, 'newsMax', this.n); },
+  geo() { const s = SC(), x = W * 0.12, w = W * 0.76, top = H * 0.12, h = H * 0.64; return { s, x, w, top, h }; },
+  down(id, x, y) { if (this.ptr == null) { this.ptr = id; this.cut = { y, xa: x, xb: x }; } this.sx = x; this.sy = y; },
+  move(id, x, y) {
+    if (id !== this.ptr) return;
+    const g = this.geo(), c = this.cut;
+    this.sx = x; this.sy = y;
+    if (Math.abs(y - c.y) > 30 * g.s) { this.cut = { y, xa: x, xb: x }; return; } // 高さが大きくずれたら、そこから切り直し
+    c.xa = Math.min(c.xa, x); c.xb = Math.max(c.xb, x);
+    if (Math.random() < 0.3) sfx.snip();
+    const lo = Math.max(c.xa, g.x), hi = Math.min(c.xb, g.x + g.w);
+    if (hi - lo >= g.w * NEWS_SPAN && c.y > g.top + 16 * g.s && c.y < this.bottom - 8 * g.s && this.slide === 0) { // 横に切れた。線から下が落ちる
+      this.strips.push({ y0: c.y, y1: this.bottom, x: 0, y: 0, vx: rnd(-60, 60), vy: rnd(0, 80), r: 0, vr: rnd(-1.5, 1.5) });
+      this.bottom = c.y;
+      if (scoring()) this.n++;
+      sfx.rip();
+      this.cut = { y, xa: x, xb: x };
+      if (this.bottom - g.top < g.h * 0.15) this.slide = 1; // 短くなりすぎたら、次のページ
+    }
+  },
+  up(id) { if (id == null || id === this.ptr) this.ptr = null; },
+  update(dt) {
+    if (this.slide > 0) { this.slide = Math.max(0, this.slide - dt / 0.35); if (this.slide === 0) this.reset(); }
+    for (let i = this.strips.length - 1; i >= 0; i--) { const t = this.strips[i]; t.vy += 900 * dt; t.x += t.vx * dt; t.y += t.vy * dt; t.r += t.vr * dt; if (t.y > H) this.strips.splice(i, 1); }
+  },
+  paper(y0, y1) { // 新聞の y0〜y1 の部分（見出し・写真・記事の行）
+    const g = this.geo(), s = g.s;
+    ctx.save(); ctx.beginPath(); ctx.rect(g.x - 2, y0, g.w + 4, y1 - y0); ctx.clip();
+    ctx.fillStyle = '#f4f1e8'; ctx.fillRect(g.x, g.top, g.w, g.h); ctx.lineWidth = 2; ctx.strokeStyle = INK; ctx.strokeRect(g.x, g.top, g.w, g.h);
+    ctx.fillStyle = INK; ctx.font = `${Math.round(30 * s)}px ${DISPLAY}`; ctx.textAlign = 'right'; ctx.textBaseline = 'top';
+    ctx.fillText('朝刊', g.x + g.w - 12 * s, g.top + 10 * s); ctx.textAlign = 'left';
+    ctx.fillRect(g.x + 12 * s, g.top + 50 * s, g.w - 24 * s, 3);
+    ctx.font = `${Math.round(22 * s)}px ${DISPLAY}`; ctx.fillText('いたずら、ふえる', g.x + 14 * s, g.top + 62 * s);
+    ctx.fillStyle = '#b8c4cc'; ctx.fillRect(g.x + 14 * s, g.top + 100 * s, g.w * 0.42, g.h * 0.24); ctx.strokeRect(g.x + 14 * s, g.top + 100 * s, g.w * 0.42, g.h * 0.24); // 写真
+    ctx.fillStyle = '#8f8a80';
+    for (let yy = g.top + 100 * s; yy < g.top + g.h - 10 * s; yy += 9 * s) { // 記事の行
+      const left = yy < g.top + 100 * s + g.h * 0.24 + 6 * s ? g.x + g.w * 0.42 + 24 * s : g.x + 14 * s;
+      ctx.fillRect(left, yy, g.x + g.w - 14 * s - left, 3 * s);
+    }
+    ctx.restore();
+  },
+  draw() {
+    const g = this.geo(), s = g.s;
+    ctx.fillStyle = this.bg; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#c9a77c'; ctx.fillRect(0, H * 0.8, W, H * 0.2); ctx.fillStyle = INK; ctx.fillRect(0, H * 0.8 - 2, W, 3);
+    ctx.save(); if (this.slide > 0) ctx.translate(-(1 - this.slide) * W, 0); this.paper(g.top, this.bottom); ctx.restore();
+    if (this.slide > 0) { ctx.save(); ctx.translate(this.slide * W, 0); this.paper(g.top, g.top + g.h); ctx.restore(); }
+    for (const t of this.strips) { ctx.save(); const cy = (t.y0 + t.y1) / 2; ctx.translate(t.x + W / 2, t.y + cy); ctx.rotate(t.r); ctx.translate(-W / 2, -cy); this.paper(t.y0, t.y1); ctx.restore(); }
+    const c = this.cut;
+    if (this.ptr != null && c && c.xb > c.xa) { ctx.setLineDash([6 * s, 5 * s]); ctx.lineWidth = 2; ctx.strokeStyle = HOT; ctx.beginPath(); ctx.moveTo(Math.max(c.xa, g.x), c.y); ctx.lineTo(Math.min(c.xb, g.x + g.w), c.y); ctx.stroke(); ctx.setLineDash([]); } // 切りかけの線
+    // ハサミ
+    const op = this.ptr != null ? Math.abs(Math.sin(clock * 20)) * 0.4 : 0.35;
+    ctx.save(); ctx.translate(this.sx, this.sy); ctx.lineWidth = 3; ctx.strokeStyle = INK;
+    for (const k of [-1, 1]) { ctx.save(); ctx.rotate(k * op); ctx.fillStyle = '#c7ced5'; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-44 * s, -4 * s); ctx.lineTo(0, 4 * s); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.beginPath(); ctx.arc(14 * s, k * 10 * s, 8 * s, 0, Math.PI * 2); ctx.fillStyle = HOT; ctx.fill(); ctx.stroke(); ctx.restore(); }
+    ctx.restore();
+  },
+  drawHint(t) { const g = this.geo(), p = (t * 0.9) % 1; finger(g.x + p * g.w, g.top + g.h * 0.75, 0.9); }
+};
+
+/* ---------- 大盛り10: シャボン玉 ---------- */
+const BUBBLE_PER = 50, BUBBLE_YEN = 100; // シャボン液1本で吹ける数と値段
+const bubble = {
+  key: 'bubble', name: 'シャボン玉', prompt: 'ふけ！', hint: '押したまま 向きを変える', bg: '#e9f3ea',
+  bgm: song(120, [
+    ['bub', 0.1, '79 . 84 . 88 . 84 . 79 . 84 . 91 . . . 77 . 81 . 86 . 81 . 77 . 81 . 89 . . .'],
+    ['ep', 0.1, '48 . . . 52 . . . 55 . . . 52 . . . 50 . . . 53 . . . 57 . . . 53 . . .']
+  ], ['k...h.h.s...h...k...h.h.s...h.h.']),
+  shop: [['シャボン玉液', 'シャボン玉 液']],
+  bill(t) { const n = t.bubble || 0, b = t.bubbleBottle || 0; return { v: n + '個', n: '家具と床をふく' + (b ? '・シャボン液 ' + b + '本' : ''), sec: n * 2, yen: b * BUBBLE_YEN }; },
+  init() { this.n = 0; this.blown = 0; this.bs = []; this.spots = []; this.ptr = null; this.tx = W / 2; this.ty = H * 0.4; this.acc = 0; },
+  started() { return this.blown > 0; },
+  result() { return this.n + '個'; },
+  commit(tot) { add(tot, 'bubble', this.n); add(tot, 'bubbleBottle', Math.ceil(this.blown / BUBBLE_PER)); mx(tot, 'bubbleMax', this.n); },
+  geo() { const s = SC(); return { s, wx: W / 2, wy: H * 0.86, things: [ // 当たると割れて跡がつく家具（x, y, w, h, 種類）
+    [W * 0.04, H * 0.2, W * 0.34, H * 0.48, 'cabinet'], [W * 0.6, H * 0.33, W * 0.36, H * 0.19, 'tv'], [W * 0.6, H * 0.52, W * 0.36, H * 0.16, 'stand'], [W * 0.43, H * 0.06, W * 0.14, W * 0.14, 'clock']] }; },
+  furniture(t) { // 食器棚・テレビ・テレビ台・壁時計
+    const s = SC(), [x, y, w, h, k] = t;
+    ctx.lineWidth = 3; ctx.strokeStyle = INK;
+    if (k === 'cabinet') {
+      rr(x, y, w, h, 4 * s); ctx.fillStyle = '#b97a45'; ctx.fill(); ctx.stroke();
+      const gy = y + 8 * s, gh = h * 0.55;
+      for (const dx of [0, 1]) { // ガラス戸の中にお皿とコップ
+        const gx = x + 8 * s + dx * (w - 16 * s) / 2, gw = (w - 16 * s) / 2 - 4 * s;
+        ctx.fillStyle = '#d8eef7'; ctx.fillRect(gx, gy, gw, gh); ctx.strokeRect(gx, gy, gw, gh);
+        ctx.fillStyle = INK; ctx.fillRect(gx, gy + gh * 0.5, gw, 3);
+        ctx.fillStyle = PAPER; for (let i = 0; i < 2; i++) { ctx.beginPath(); ctx.ellipse(gx + gw * (0.3 + i * 0.4), gy + gh * 0.4, gw * 0.16, gw * 0.16, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }
+        ctx.fillStyle = '#ff9ecf'; for (let i = 0; i < 2; i++) { ctx.fillRect(gx + gw * (0.2 + i * 0.4), gy + gh * 0.75, gw * 0.2, gh * 0.22); ctx.strokeRect(gx + gw * (0.2 + i * 0.4), gy + gh * 0.75, gw * 0.2, gh * 0.22); }
+      }
+      for (let i = 0; i < 2; i++) { const dy = gy + gh + 8 * s + i * (h - gh - 24 * s) / 2; ctx.fillStyle = '#d29a62'; ctx.fillRect(x + 8 * s, dy, w - 16 * s, (h - gh - 24 * s) / 2 - 4 * s); ctx.strokeRect(x + 8 * s, dy, w - 16 * s, (h - gh - 24 * s) / 2 - 4 * s); ctx.fillStyle = INK; ctx.fillRect(x + w / 2 - 10 * s, dy + 8 * s, 20 * s, 4 * s); } // 引き出し
+    } else if (k === 'tv') {
+      rr(x, y, w, h, 6 * s); ctx.fillStyle = '#2f2a3a'; ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#4f86f7'; ctx.fillRect(x + 8 * s, y + 8 * s, w - 16 * s, h - 16 * s); // 画面
+      ctx.fillStyle = 'rgba(255,255,255,.35)'; ctx.beginPath(); ctx.moveTo(x + 14 * s, y + 12 * s); ctx.lineTo(x + w * 0.4, y + 12 * s); ctx.lineTo(x + 14 * s, y + h * 0.6); ctx.closePath(); ctx.fill();
+    } else if (k === 'stand') {
+      ctx.fillStyle = '#8a5a35'; ctx.fillRect(x, y, w, h); ctx.strokeRect(x, y, w, h);
+      ctx.fillStyle = '#b97a45'; ctx.fillRect(x + 6 * s, y + 6 * s, w / 2 - 9 * s, h - 12 * s); ctx.strokeRect(x + 6 * s, y + 6 * s, w / 2 - 9 * s, h - 12 * s); ctx.fillRect(x + w / 2 + 3 * s, y + 6 * s, w / 2 - 9 * s, h - 12 * s); ctx.strokeRect(x + w / 2 + 3 * s, y + 6 * s, w / 2 - 9 * s, h - 12 * s);
+    } else { // 壁時計
+      const r = w / 2; ctx.beginPath(); ctx.arc(x + r, y + r, r, 0, Math.PI * 2); ctx.fillStyle = PAPER; ctx.fill(); ctx.lineWidth = 4; ctx.stroke();
+      ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(x + r, y + r); ctx.lineTo(x + r, y + r * 0.35); ctx.moveTo(x + r, y + r); ctx.lineTo(x + r * 1.5, y + r); ctx.stroke();
+    }
+  },
+  down(id, x, y) { if (this.ptr == null) this.ptr = id; this.tx = x; this.ty = y; },
+  move(id, x, y) { if (id === this.ptr) { this.tx = x; this.ty = y; } },
+  up(id) { if (id == null || id === this.ptr) this.ptr = null; },
+  update(dt) {
+    const g = this.geo(), s = g.s;
+    if (this.ptr != null) { // 押している間、指の方向へ吹き続ける
+      this.acc += dt * 14;
+      while (this.acc >= 1) {
+        this.acc -= 1;
+        const a = Math.atan2(this.ty - g.wy, this.tx - g.wx) + rnd(-0.25, 0.25), sp = rnd(220, 340) * s;
+        this.bs.push({ x: g.wx, y: g.wy - 30 * s, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, r: rnd(16, 34) * s, life: rnd(2.5, 4), ph: rnd(0, 6) });
+        if (scoring()) this.blown++; sfx.blub();
+      }
+    }
+    for (let i = this.bs.length - 1; i >= 0; i--) {
+      const b = this.bs[i];
+      b.vx *= Math.exp(-dt * 1.2); b.vy = b.vy * Math.exp(-dt * 1.2) - 12 * s * dt; b.x += b.vx * dt + Math.sin(clock * 3 + b.ph) * 12 * s * dt; b.y += b.vy * dt; b.life -= dt;
+      const hit = g.things.find(t => b.x > t[0] - b.r * 0.5 && b.x < t[0] + t[2] + b.r * 0.5 && b.y > t[1] - b.r * 0.5 && b.y < t[1] + t[3] + b.r * 0.5);
+      if (hit || b.life <= 0 || b.y < -40 || b.x < -40 || b.x > W + 40) {
+        if (hit) { this.spots.push({ x: b.x, y: b.y, r: b.r }); if (this.spots.length > 150) this.spots.shift(); if (scoring()) this.n++; sfx.popb(); }
+        this.bs.splice(i, 1);
+      }
+    }
+  },
+  draw() {
+    const g = this.geo(), s = g.s;
+    ctx.fillStyle = this.bg; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#c9a77c'; ctx.fillRect(0, H * 0.68, W, H * 0.32); ctx.fillStyle = INK; ctx.fillRect(0, H * 0.68 - 2, W, 3);
+    for (const t of g.things) this.furniture(t);
+    for (const p of this.spots) { ctx.beginPath(); ctx.arc(p.x, p.y, p.r * 0.7, 0, Math.PI * 2); ctx.fillStyle = 'rgba(255,255,255,.45)'; ctx.fill(); }
+    for (const b of this.bs) {
+      ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2); ctx.fillStyle = 'rgba(180,220,255,.25)'; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(120,140,220,.8)'; ctx.stroke();
+      ctx.beginPath(); ctx.arc(b.x - b.r * 0.35, b.y - b.r * 0.35, b.r * 0.2, 0, Math.PI * 2); ctx.fillStyle = 'rgba(255,255,255,.9)'; ctx.fill();
+    }
+    // ストロー（輪）。指の方を向く
+    const a = Math.atan2(this.ty - g.wy, this.tx - g.wx);
+    ctx.save(); ctx.translate(g.wx, g.wy); ctx.rotate(a + Math.PI / 2);
+    ctx.fillStyle = '#ff9ecf'; ctx.fillRect(-4 * s, 0, 8 * s, 60 * s); ctx.lineWidth = 3; ctx.strokeStyle = INK; ctx.strokeRect(-4 * s, 0, 8 * s, 60 * s);
+    ctx.beginPath(); ctx.arc(0, -10 * s, 14 * s, 0, Math.PI * 2); ctx.lineWidth = 5 * s; ctx.strokeStyle = '#ff5a9e'; ctx.stroke();
+    ctx.restore();
+  },
+  drawHint(t) { const p = (t * 0.7) % 1; finger(W * (0.25 + p * 0.5), H * 0.45, 0.9); }
+};
+
+STAGE_LIST.push(calendar, vacuum, futon, news, bubble);
+ZUKAN_EXTRA.push(
+  { id: 'calendar', name: '未来人', desc: 'カレンダーを1回で20日めくる', ok: t => (t.calendarMax || 0) >= 20 },
+  { id: 'vacuum', name: 'なんでも吸引', desc: '掃除機で1回で10個吸う', ok: t => (t.vacuumMax || 0) >= 10 },
+  { id: 'futon', name: '天井タッチ', desc: '布団で跳ねて天井に手が届く', ok: t => (t.futonCeil || 0) >= 1 },
+  { id: 'news', name: 'シュレッダー', desc: '新聞を1回で10本に切る', ok: t => (t.newsMax || 0) >= 10 },
+  { id: 'bubble', name: 'シャボン職人', desc: 'シャボン玉を1回で30個 家具に当てる', ok: t => (t.bubbleMax || 0) >= 30 }
+);
