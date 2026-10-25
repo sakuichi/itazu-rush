@@ -34,7 +34,7 @@
       <p class="challenge" id="challenge" hidden></p>
       <h1>いたず<br><span>ラッシュ</span><em>大盛り！</em></h1>
       <p class="lead">何が出るかは、やってみないと分からない。<br>いたずら20本、全部やってから怒られよう。</p>
-      <ul class="chips" id="chips" aria-label="出てくるいたずら"></ul>
+      <details class="chipbox" id="chipBox"><summary>出てくるいたずら <b id="chipNum"></b></summary><ul class="chips" id="chips" aria-label="出てくるいたずら"></ul></details>
       <div class="btns">
         <button class="big" id="startBtn" type="button">はじめる<small id="startSub"></small></button>
         <button class="big sub" id="endlessBtn" type="button">無限モード<small>「やめて結果を見る」まで続く</small></button>
@@ -111,7 +111,8 @@ window.ITAZU = {
   title: 'いたずラッシュ大盛り！',
   site: 'https://sakuichi.github.io/itazu-rush/oomori/',
   store: 'itazurush-oomori-',
-  stages: ['tissue', 'toilet', 'shoji', 'paste', 'shampoo', 'mud', 'toys', 'puddle', 'hose', 'elev', 'graffiti', 'soda', 'pudding', 'sticker', 'shoe', 'calendar', 'vacuum', 'futon', 'news', 'bubble', 'piano', 'pillow', 'sofa', 'light', 'yarn'],
+  stages: ['tissue', 'toilet', 'shoji', 'paste', 'shampoo', 'mud', 'toys', 'puddle', 'hose', 'elev', 'graffiti', 'soda', 'pudding', 'sticker', 'shoe', 'calendar', 'vacuum', 'futon', 'news', 'bubble', 'piano', 'pillow', 'sofa', 'light', 'yarn',
+    'closet', 'roll', 'balloon', 'clock', 'hanko'],
   order: 'random', total: 20, roundLen: 10,
   modeName: '20本モード',
   tags: '#いたずラッシュ #いたずラッシュ大盛り',

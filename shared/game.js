@@ -641,6 +641,7 @@ $('recChk').addEventListener('change', e => {
 setSound(soundOn);
 if (canRec) { $('recOpt').hidden = false; $('recNote').hidden = false; $('recChk').checked = recOn; }
 $('chips').innerHTML = NORMAL.map(s => '<li>' + s.name + '</li>').join('') + (BONUS ? '<li class="secret">？？？</li>' : '');
+if ($('chipNum')) $('chipNum').textContent = '全' + N + '種'; // 大盛りは一覧を折りたたんで、数だけ見せる
 $('startSub').textContent = RANDOM ? '全' + N + '種から' + TOTAL + '本' : '全' + N + '種を' + ROUNDS + '周';
 renderZukan();
 if (challenge != null) {

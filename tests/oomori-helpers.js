@@ -12,11 +12,11 @@ const OLD_PAGE = fileUrl(path.join(ROOT, 'index.html'));
 const SITE = 'https://sakuichi.github.io/itazu-rush/';
 const OOMORI_SITE = SITE + 'oomori/';
 
-// 既存10種＋新規15種（第1弾5種・第2弾5種・第3弾5種。この順で #chips に並ぶ）
+// 既存10種＋新規20種（第1弾5種・第2弾5種・第3弾5種・第4弾5種。この順で #chips に並ぶ）
 const OLD_KEYS = ['tissue', 'toilet', 'shoji', 'paste', 'shampoo', 'mud', 'toys', 'puddle', 'hose', 'elev'];
-const NEW_KEYS = ['graffiti', 'soda', 'pudding', 'sticker', 'shoe', 'calendar', 'vacuum', 'futon', 'news', 'bubble', 'piano', 'pillow', 'sofa', 'light', 'yarn'];
+const NEW_KEYS = ['graffiti', 'soda', 'pudding', 'sticker', 'shoe', 'calendar', 'vacuum', 'futon', 'news', 'bubble', 'piano', 'pillow', 'sofa', 'light', 'yarn', 'closet', 'roll', 'balloon', 'clock', 'hanko'];
 const KEYS = OLD_KEYS.concat(NEW_KEYS);
-const NEW_NAMES = { graffiti: '落書き', soda: '炭酸', pudding: 'プリン', sticker: 'シール', shoe: '靴飛ばし', calendar: 'カレンダー', vacuum: '掃除機', futon: '布団', news: '新聞', bubble: 'シャボン玉', piano: 'ピアノ', pillow: '枕', sofa: 'ソファ', light: '電気のスイッチ', yarn: '毛糸玉' };
+const NEW_NAMES = { graffiti: '落書き', soda: '炭酸', pudding: 'プリン', sticker: 'シール', shoe: '靴飛ばし', calendar: 'カレンダー', vacuum: '掃除機', futon: '布団', news: '新聞', bubble: 'シャボン玉', piano: 'ピアノ', pillow: '枕', sofa: 'ソファ', light: '電気のスイッチ', yarn: '毛糸玉', closet: '押し入れ', roll: 'ロールスクリーン', balloon: '風船', clock: '時計', hanko: 'ハンコ' };
 
 // ページを開く（既存版の helpers.open と同じ形）。errors にはページ内のエラーがたまる
 async function openPage(browser, url, { query = '', width = 390, height = 844 } = {}) {
@@ -122,6 +122,33 @@ const NEW_ACTS = {
   async yarn(p, W, H) {
     const m = p.mouse;
     for (const [dx, dy] of [[60, -200], [-200, -60], [150, 120]]) { await m.move(W * 0.5, H * 0.6); await m.down(); await m.move(W * 0.5 + dx, H * 0.6 + dy, { steps: 3 }); await m.up(); await sleep(200); }
+  },
+  // いちばん下の布団（棚の上）を押して、左右へ交互に3回引き抜く
+  async closet(p, W, H) {
+    const m = p.mouse;
+    for (let i = 0; i < 3; i++) { await m.move(W * 0.4, H * 0.48); await m.down(); await m.move(W * (i % 2 ? 0.05 : 0.8), H * 0.48, { steps: 4 }); await m.up(); await sleep(550); }
+  },
+  // スクリーンを下へ大きく引っぱって離す（巻き上がってバチン）を3回
+  async roll(p, W, H) {
+    const m = p.mouse;
+    for (let i = 0; i < 3; i++) { await m.move(W / 2, H * 0.3); await m.down(); await m.move(W / 2, H * 0.62, { steps: 4 }); await m.up(); await sleep(450); }
+  },
+  // 押したまま上下に20往復して、空気入れを押す
+  async balloon(p, W, H) {
+    const m = p.mouse; await m.move(W * 0.78, H * 0.55); await m.down();
+    for (let i = 0; i < 20; i++) { await m.move(W * 0.78, H * 0.75, { steps: 2 }); await m.move(W * 0.78, H * 0.55, { steps: 2 }); }
+    await m.up();
+  },
+  // 時計の真ん中のまわりを、時計回りに5周なぞる
+  async clock(p, W, H) {
+    const m = p.mouse, cx = W / 2, cy = H * 0.5, r = 110; await m.move(cx + r, cy); await m.down();
+    for (let i = 1; i <= 80; i++) { const a = i / 16 * Math.PI * 2; await m.move(cx + Math.cos(a) * r, cy + Math.sin(a) * r); }
+    await m.up();
+  },
+  // 書類のあちこちを28回タップしてハンコを押す
+  async hanko(p, W, H) {
+    const m = p.mouse;
+    for (let i = 0; i < 28; i++) await m.click(W * (0.2 + (i % 5) * 0.15), H * (0.25 + Math.floor(i / 5) * 0.08));
   }
 };
 const OACTS = Object.assign({}, ACTS, NEW_ACTS);
