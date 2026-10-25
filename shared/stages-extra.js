@@ -969,7 +969,7 @@ const piano = {
 /* ---------- 大盛り12: 枕をふりまわす ---------- */
 const PILLOW_RIP = 280, PILLOW_YEN = 1000; // 1回で羽がこの枚数以上出たら、枕が破れて買い直し
 const PILLOW_SEC = 1;  // 羽を拾う（1枚）
-const PILLOW_SWING = 700, PILLOW_PUFF = 120; // この速さ px/秒（SC()）より速く振りまわすと、この長さ px（SC()）動くたびに羽が1枚こぼれる
+const PILLOW_SWING = 400, PILLOW_PUFF = 50; // この速さ px/秒（SC()）より速く振りまわすと、この長さ px（SC()）動くたびに羽が1枚こぼれる
 const pillow = {
   key: 'pillow', name: '枕', prompt: 'ふりまわせ！', hint: '枕を ふりまわす・ぶつける', bg: '#f6dcc0',
   bgm: song(150, [
