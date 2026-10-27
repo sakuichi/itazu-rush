@@ -12,11 +12,11 @@ const OLD_PAGE = fileUrl(path.join(ROOT, 'index.html'));
 const SITE = 'https://sakuichi.github.io/itazu-rush/';
 const OOMORI_SITE = SITE + 'oomori/';
 
-// 既存10種＋新規20種（第1弾5種・第2弾5種・第3弾5種・第4弾5種。この順で #chips に並ぶ）
+// 既存10種＋新規25種（第1弾5種・第2弾5種・第3弾5種・第4弾5種・第5弾5種。この順で #chips に並ぶ）
 const OLD_KEYS = ['tissue', 'toilet', 'shoji', 'paste', 'shampoo', 'mud', 'toys', 'puddle', 'hose', 'elev'];
-const NEW_KEYS = ['graffiti', 'soda', 'pudding', 'sticker', 'shoe', 'calendar', 'vacuum', 'futon', 'news', 'bubble', 'piano', 'pillow', 'sofa', 'light', 'yarn', 'closet', 'roll', 'balloon', 'clock', 'hanko'];
+const NEW_KEYS = ['graffiti', 'soda', 'pudding', 'sticker', 'shoe', 'calendar', 'vacuum', 'futon', 'news', 'bubble', 'piano', 'pillow', 'sofa', 'light', 'yarn', 'closet', 'roll', 'balloon', 'clock', 'hanko', 'gift', 'cake', 'bath', 'peel', 'laces'];
 const KEYS = OLD_KEYS.concat(NEW_KEYS);
-const NEW_NAMES = { graffiti: '落書き', soda: '炭酸', pudding: 'プリン', sticker: 'シール', shoe: '靴飛ばし', calendar: 'カレンダー', vacuum: '掃除機', futon: '布団', news: '新聞', bubble: 'シャボン玉', piano: 'ピアノ', pillow: '枕', sofa: 'ソファ', light: '電気のスイッチ', yarn: '毛糸玉', closet: '押し入れ', roll: 'ロールスクリーン', balloon: '風船', clock: '時計', hanko: 'ハンコ' };
+const NEW_NAMES = { graffiti: '落書き', soda: '炭酸', pudding: 'プリン', sticker: 'シール', shoe: '靴飛ばし', calendar: 'カレンダー', vacuum: '掃除機', futon: '布団', news: '新聞', bubble: 'シャボン玉', piano: 'ピアノ', pillow: '枕', sofa: 'ソファ', light: '電気のスイッチ', yarn: '毛糸玉', closet: '押し入れ', roll: 'ロールスクリーン', balloon: '風船', clock: '時計', hanko: 'ハンコ', gift: '菓子折り', cake: 'ケーキのいちご', bath: '入浴剤', peel: '壁紙', laces: '靴ひも' };
 
 // ページを開く（既存版の helpers.open と同じ形）。errors にはページ内のエラーがたまる
 async function openPage(browser, url, { query = '', width = 390, height = 844 } = {}) {
@@ -149,6 +149,43 @@ const NEW_ACTS = {
   async hanko(p, W, H) {
     const m = p.mouse;
     for (let i = 0; i < 28; i++) await m.click(W * (0.2 + (i % 5) * 0.15), H * (0.25 + Math.floor(i / 5) * 0.08));
+  },
+  // 菓子折りを押して、上へ大きく引っぱる×6
+  async gift(p, W, H) {
+    const m = p.mouse;
+    for (let i = 0; i < 6; i++) { await m.move(W / 2, H * 0.5); await m.down(); await m.move(W / 2, H * 0.3, { steps: 4 }); await m.up(); await sleep(400); }
+  },
+  // ケーキのいちご（まわりに6個）を順につまんで、上へ引っぱる。6個食べたら次のケーキが来るのを待つ
+  async cake(p, W, H) {
+    const m = p.mouse;
+    for (let i = 0; i < 9; i++) {
+      const a = (i % 6) / 6 * Math.PI * 2, x = W / 2 + Math.cos(a) * 120, y = H * 0.36 + Math.sin(a) * 58 - 12;
+      await m.move(x, y); await m.down(); await m.move(x, y - 90, { steps: 4 }); await m.up(); await sleep(60);
+      if (i === 5) await sleep(800);
+    }
+  },
+  // かごの前から、上へ投げる×7
+  async bath(p, W, H) {
+    const m = p.mouse;
+    for (let i = 0; i < 7; i++) { const x = W * (0.3 + (i % 3) * 0.2); await m.move(x, H * 0.86); await m.down(); await m.move(x, H * 0.7, { steps: 3 }); await m.up(); await sleep(120); }
+  },
+  // 壁紙（1面3枚）を1列ずつ下へなぞる。1面はがしたら、となりの壁に移るのを待ってもう1面
+  async peel(p, W, H) {
+    const m = p.mouse;
+    for (let i = 0; i < 6; i++) {
+      const x = W * ((i % 3) + 0.5) / 3; await m.move(x, H * 0.15); await m.down(); await m.move(x, H * 0.75, { steps: 6 }); await m.up(); await sleep(80);
+      if (i === 2) await sleep(800);
+    }
+  },
+  // 玄関の靴（上の列4つ・下の列4つ）を、一筆で次々なぞる
+  async laces(p, W, H) {
+    const m = p.mouse, y1 = H * 0.3 + 0.22 * H * 0.54, y2 = H * 0.3 + 0.56 * H * 0.54, xs = [0.15, 0.37, 0.63, 0.85].map(k => W * k);
+    await m.move(xs[0], y1); await m.down();
+    for (const x of xs.slice(1)) await m.move(x, y1, { steps: 6 });
+    await m.move(xs[3], y2, { steps: 6 });
+    for (const x of xs.slice(0, 3).reverse()) await m.move(x, y2, { steps: 6 });
+    await m.move(xs[1], y1, { steps: 6 });
+    await m.up();
   }
 };
 const OACTS = Object.assign({}, ACTS, NEW_ACTS);

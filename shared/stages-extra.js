@@ -1722,3 +1722,491 @@ ZUKAN_EXTRA.push(
   { id: 'clock', name: '未来へ早送り', desc: '時計を1回で20時間 進める', ok: t => (t.clockMax || 0) >= 20 },
   { id: 'hanko', name: 'ハンコ部長', desc: 'ハンコを1回で40個 押す', ok: t => (t.hankoMax || 0) >= 40 }
 );
+
+/* ===== 第5弾（2026-10-26 追加） ===== */
+Object.assign(sfx, {
+  bite() { tone(520, 300, 0.06, 0.15, 'square'); noise(0.05, 1200, 1, 0.15); },
+  plop() { tone(420, 120, 0.12, 0.3, 'sine'); noise(0.1, 900, 0.8, 0.2, 'lowpass'); },
+  knot() { tone(700, 480, 0.05, 0.12, 'triangle'); noise(0.04, 3000, 2, 0.12); },
+  scatter() { for (let i = 0; i < 4; i++) noise(0.04, rnd(2000, 4000), 1, 0.12, 'bandpass', i * 0.03); },
+  toss() { noise(0.08, 1500, 1, 0.12, 'highpass'); }
+});
+
+/* ---------- 大盛り21: 菓子折り ---------- */
+const GIFT_PULL = 90;  // 箱を押したまま、この長さ px（SC()）上へ引っぱると、包み紙がビリッと破れる
+const GIFT_SEC = 60;   // 包み紙を買ってきて、包み直す（1箱）
+const GIFT_BUY = 5, GIFT_YEN = 1000; // 1回でこの数以上破いたら、お詫びに持っていけないので、菓子折りの買い直し
+const GIFT_PAPER = [['#efe0bf', '#b0864f'], ['#d6e4f2', '#4f7fb5'], ['#f4d6dc', '#c0566e'], ['#dbe8cc', '#5f8f4a']]; // 包み紙の地の色・柄の色
+const gift = {
+  key: 'gift', name: '菓子折り', prompt: '破れ！', hint: '包み紙を 上に引っぱる', bg: '#f1e6d2',
+  bgm: song(152, [
+    ['square', 0.045, '76 . 79 . 81 . 79 . 76 . 72 . 74 . . . 77 . 81 . 84 . 81 . 77 . 74 . 76 . . .'],
+    ['triangle', 0.13, '48 . . . 55 . . . 53 . . . 55 . . . 50 . . . 57 . . . 55 . . . 43 . . .']
+  ], ['k.hhs.h.k.hhs.hh']),
+  shop: [['菓子折り', '菓子折り'], ['包装紙', '包装紙']],
+  bill(t) { const n = t.gift || 0, b = t.giftBuy || 0; return { v: n + '箱', n: (b ? '菓子折りの買い直し・' : '') + '包み直す', sec: n * GIFT_SEC, yen: b * GIFT_YEN }; },
+  init() { this.n = 0; this.ptr = null; this.y0 = 0; this.t0 = 0; this.pull = 0; this.pi = Math.floor(Math.random() * GIFT_PAPER.length); this.box = this.newBox(); this.bits = []; this.scraps = []; this.falling = []; this.pile = []; this.wait = 0; this.say = ''; this.sayT = 0; },
+  newBox() { return { p: GIFT_PAPER[this.pi++ % GIFT_PAPER.length], in: 1 }; },
+  started() { return this.n > 0; },
+  result() { return this.n + '箱'; },
+  commit(tot) { add(tot, 'gift', this.n); add(tot, 'giftBuy', this.n >= GIFT_BUY ? 1 : 0); mx(tot, 'giftMax', this.n); },
+  geo() { const s = SC(); return { s, cx: W / 2, cy: H * 0.46, w: 230 * s, h: 150 * s, floor: H * 0.8 }; },
+  down(id, x, y) { // 箱のあたりを押す（次の箱が入ってくる途中でも、ほぼ着いていれば押せる）
+    const g = this.geo();
+    if (this.ptr == null && this.box && this.box.in < 0.3 && Math.abs(x - g.cx) < g.w * 0.7 && Math.abs(y - g.cy) < g.h * 1.1) { this.ptr = id; this.y0 = y; this.t0 = clock; }
+  },
+  move(id, x, y) {
+    if (id !== this.ptr) return;
+    const s = SC(); this.pull = Math.max(0, this.y0 - y);
+    if (this.pull > GIFT_PULL * s) this.open(this.pull / Math.max(0.04, clock - this.t0) / s);
+  },
+  up(id) { if (id == null || id === this.ptr) this.ptr = null; },
+  open(sp) { // ビリッ。速く引っぱるほど、紙が細かく派手に飛ぶ
+    const g = this.geo(), s = g.s, b = this.box, k = clamp(sp / 1400, 0.35, 1);
+    const m = Math.round(12 + k * 26);
+    for (let i = 0; i < m; i++) this.bits.push({ x: g.cx + rnd(-0.45, 0.45) * g.w, y: g.cy + rnd(-0.4, 0.3) * g.h, vx: rnd(-1, 1) * 420 * s * k, vy: -rnd(300, 900) * s * k, r: rnd(0, 6), vr: rnd(-8, 8), c: i % 4 ? b.p[0] : PAPER, z: rnd(8, 18) * s * (1.3 - k * 0.5), land: g.floor + rnd(6, H - g.floor - 8) });
+    this.bits.push({ x: g.cx, y: g.cy, vx: rnd(-1, 1) * 200 * s, vy: -700 * s, r: 0, vr: rnd(-4, 4), c: 'noshi', z: 0, land: g.floor + rnd(10, H - g.floor - 20) }); // のし紙も飛ぶ
+    this.falling.push({ x: g.cx, y: g.cy, vx: rnd(-1, 1) * 160 * s, vy: -120 * s, r: 0, vr: rnd(-1, 1) * 2 });
+    if (scoring()) this.n++;
+    if (scoring() && this.n === GIFT_BUY) { this.say = 'お詫びに行けない…！'; this.sayT = 1; }
+    else if (k > 0.8) { this.say = 'ビリビリビリッ！'; this.sayT = 0.5; } else if (this.sayT <= 0.2) { this.say = 'ビリッ！'; this.sayT = 0.4; }
+    sfx.rip(); sfx.scatter();
+    this.box = null; this.ptr = null; this.pull = 0; this.wait = 0.2;
+  },
+  update(dt) {
+    const g = this.geo(), s = g.s;
+    this.sayT = Math.max(0, this.sayT - dt);
+    if (this.ptr == null) this.pull *= Math.exp(-dt * 16); // 途中で離したら戻る
+    if (!this.box) { this.wait -= dt; if (this.wait <= 0) this.box = this.newBox(); }
+    else this.box.in = Math.max(0, this.box.in - dt / 0.22);
+    for (let i = this.bits.length - 1; i >= 0; i--) { // 紙きれは、ひらひら落ちて床に残る
+      const f = this.bits[i]; f.vy = Math.min(f.vy + 1300 * s * dt, 260 * s); f.vx *= Math.exp(-dt * 1.5); f.x += f.vx * dt + Math.sin(clock * 6 + f.r) * 30 * s * dt; f.y += f.vy * dt; f.r += f.vr * dt;
+      if (f.y >= f.land && f.vy > 0) { this.scraps.push(f); this.bits.splice(i, 1); }
+    }
+    if (this.scraps.length > 200) this.scraps.splice(0, this.scraps.length - 200);
+    for (let i = this.falling.length - 1; i >= 0; i--) { // 包み紙のなくなった箱は、床に積まれる
+      const f = this.falling[i]; f.vy += 1800 * s * dt; f.x += f.vx * dt; f.y += f.vy * dt; f.r += f.vr * dt;
+      if (f.y > g.floor + 10 * s && f.vy > 0) { this.pile.push({ x: clamp(f.x + rnd(-1, 1) * W * 0.3, W * 0.15, W * 0.85), y: g.floor + rnd(14, H - g.floor - 30 * s), r: rnd(-0.4, 0.4) }); if (this.pile.length > 10) this.pile.shift(); this.falling.splice(i, 1); }
+    }
+  },
+  scrap(f) { // 紙きれ（のし紙は細長い白に赤い線）
+    const s = SC(); ctx.save(); ctx.translate(f.x, f.y); ctx.rotate(f.r); ctx.lineWidth = 2; ctx.strokeStyle = INK;
+    if (f.c === 'noshi') { ctx.fillStyle = PAPER; ctx.fillRect(-14 * s, -40 * s, 28 * s, 80 * s); ctx.strokeRect(-14 * s, -40 * s, 28 * s, 80 * s); ctx.fillStyle = '#d9302c'; ctx.fillRect(-14 * s, -6 * s, 28 * s, 4 * s); }
+    else { ctx.beginPath(); ctx.moveTo(-f.z, -f.z * 0.6); ctx.lineTo(f.z * 0.8, -f.z * 0.8); ctx.lineTo(f.z, f.z * 0.5); ctx.lineTo(-f.z * 0.6, f.z * 0.7); ctx.closePath(); ctx.fillStyle = f.c; ctx.fill(); ctx.stroke(); }
+    ctx.restore();
+  },
+  plain(x, y, w, h, r) { // 包み紙をはがした箱（ふたに「銘菓」）
+    const s = SC(); ctx.save(); ctx.translate(x, y); ctx.rotate(r || 0); ctx.lineWidth = 3; ctx.strokeStyle = INK;
+    rr(-w / 2, -h / 2, w, h, 6 * s); ctx.fillStyle = '#f6efe0'; ctx.fill(); ctx.stroke();
+    ctx.strokeRect(-w / 2 + 6 * s, -h / 2 + 6 * s, w - 12 * s, h - 12 * s);
+    ctx.fillStyle = INK; ctx.font = `${Math.round(h * 0.22)}px ${DISPLAY}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('銘菓', 0, 0); ctx.textAlign = 'left';
+    ctx.restore();
+  },
+  wrapped(x, y, w, h, p, pull) { // 包み紙とのし紙（「お詫び」）。引っぱると、紙の上のふちがめくれる
+    const s = SC();
+    this.plain(x, y, w, h);
+    ctx.save(); ctx.lineWidth = 3; ctx.strokeStyle = INK;
+    const lift = Math.min(pull, 140 * s);
+    ctx.beginPath(); ctx.moveTo(x - w / 2, y + h / 2); ctx.lineTo(x - w / 2, y - h / 2); ctx.quadraticCurveTo(x, y - h / 2 - lift * 0.5, x + w / 2, y - h / 2); ctx.lineTo(x + w / 2, y + h / 2); ctx.closePath();
+    ctx.fillStyle = p[0]; ctx.fill(); ctx.stroke();
+    ctx.save(); ctx.clip(); ctx.strokeStyle = p[1]; ctx.globalAlpha = 0.45; ctx.lineWidth = 6 * s; // ななめのしま
+    for (let k = -h * 2; k < w + h; k += 22 * s) { ctx.beginPath(); ctx.moveTo(x - w / 2 + k, y + h / 2); ctx.lineTo(x - w / 2 + k + h * 1.4, y - h / 2 - lift); ctx.stroke(); }
+    ctx.restore();
+    ctx.fillStyle = PAPER; ctx.fillRect(x - 26 * s, y - h / 2 - lift * 0.3, 52 * s, h + lift * 0.3); ctx.lineWidth = 2; ctx.strokeStyle = INK; ctx.strokeRect(x - 26 * s, y - h / 2 - lift * 0.3, 52 * s, h + lift * 0.3); // のし紙
+    ctx.fillStyle = '#d9302c'; ctx.fillRect(x - 26 * s, y - 2 * s, 52 * s, 3 * s); ctx.fillRect(x - 26 * s, y + 4 * s, 52 * s, 3 * s); // 水引
+    ctx.fillStyle = INK; ctx.font = `${Math.round(18 * s)}px ${DISPLAY}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ['お', '詫', 'び'].forEach((c, i) => ctx.fillText(c, x, y - h * 0.4 + i * 19 * s)); // 表書きは水引の上、下は「家族一同」
+    ctx.font = `${Math.round(12 * s)}px ${DISPLAY}`; ['家', '族', '一', '同'].forEach((c, i) => ctx.fillText(c, x, y + 17 * s + i * 13 * s)); ctx.textAlign = 'left';
+    ctx.restore();
+  },
+  draw() {
+    const g = this.geo(), s = g.s;
+    ctx.fillStyle = this.bg; ctx.fillRect(0, 0, W, g.floor);
+    ctx.fillStyle = '#d8d49a'; ctx.fillRect(0, g.floor, W, H - g.floor); ctx.fillStyle = INK; ctx.fillRect(0, g.floor - 2, W, 3); // 畳
+    ctx.strokeStyle = 'rgba(35,27,46,.2)'; ctx.lineWidth = 2; for (let x = 0; x < W; x += W / 3) { ctx.beginPath(); ctx.moveTo(x, g.floor); ctx.lineTo(x, H); ctx.stroke(); }
+    // 壁のメモ「お隣へ あした持っていく」
+    ctx.lineWidth = 3; ctx.strokeStyle = INK;
+    rr(W * 0.6, H * 0.14, W * 0.32, H * 0.09, 4 * s); ctx.fillStyle = PAPER; ctx.fill(); ctx.stroke();
+    ctx.fillStyle = INK; ctx.font = `${Math.round(15 * s)}px ${DISPLAY}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('お隣へ', W * 0.76, H * 0.165); ctx.fillText('あした持っていく', W * 0.76, H * 0.2, W * 0.3); ctx.textAlign = 'left';
+    // ちゃぶ台
+    ctx.fillStyle = '#7a5236'; ctx.fillRect(g.cx - W * 0.3, g.cy + g.h * 0.6, 12 * s, H * 0.14); ctx.fillRect(g.cx + W * 0.3 - 12 * s, g.cy + g.h * 0.6, 12 * s, H * 0.14);
+    ctx.beginPath(); ctx.ellipse(g.cx, g.cy + g.h * 0.55, W * 0.44, 30 * s, 0, 0, Math.PI * 2); ctx.fillStyle = '#9c6b45'; ctx.fill(); ctx.stroke();
+    for (const p of this.pile) this.plain(p.x, p.y, g.w * 0.45, g.h * 0.45, p.r);
+    for (const f of this.scraps) this.scrap(f);
+    if (this.box) this.wrapped(g.cx + this.box.in * W, g.cy, g.w, g.h, this.box.p, this.pull);
+    for (const f of this.falling) this.plain(f.x, f.y, g.w * 0.8, g.h * 0.8, f.r);
+    for (const f of this.bits) this.scrap(f);
+    if (this.sayT > 0) bigText(this.say, W / 2, H * 0.3, Math.round(34 * s), HOT, PAPER, W * 0.85);
+  },
+  drawHint(t) { const g = this.geo(), p = (t * 1.3) % 1; finger(g.cx - 60 * g.s, g.cy + 30 * g.s - p * 110 * g.s, 0.9); }
+};
+
+/* ---------- 大盛り22: ケーキのいちご ---------- */
+const CAKE_N = 6;      // ケーキ1台にのっているいちご
+const CAKE_PULL = 50;  // いちごをつまんで、この長さ px（SC()）動かすと、パクッ
+const CAKE_GRAB = 70;  // いちごの真ん中からこの距離 px（SC()）までなら、つまめる
+const CAKE_SEC = 30;   // いちごを買ってきて、のせ直す（1個）
+const CAKE_REDO = 6, CAKE_YEN = 1000; // 1回でこの数以上（1台ぶん）食べたら、ケーキの買い直し
+const cake = {
+  key: 'cake', name: 'ケーキのいちご', prompt: 'つまめ！', hint: 'いちごを つまんで ひっぱる', bg: '#fde3ea',
+  bgm: song(128, [
+    ['bell', 0.05, '79 . 76 . 72 . 76 . 79 . 84 . 83 . . . 81 . 77 . 74 . 77 . 81 . 79 . . . . .'],
+    ['triangle', 0.13, '48 . . . 52 . . . 55 . . . 52 . . . 53 . . . 57 . . . 55 . . . 50 . . .']
+  ], ['k...s...k.k.s...']),
+  shop: [['いちご', 'いちご'], ['ホールケーキ', 'ホールケーキ']],
+  bill(t) { const n = t.cake || 0, r = t.cakeRedo || 0; return { v: n + '個', n: (r ? 'ケーキの買い直し・' : '') + 'いちごをのせ直す', sec: n * CAKE_SEC, yen: r * CAKE_YEN }; },
+  init() { this.n = 0; this.ptr = {}; this.berries = this.newCake(); this.old = null; this.slide = 0; this.wait = 0; this.bites = []; this.say = ''; this.sayT = 0; },
+  newCake() { return Array.from({ length: CAKE_N }, (_, i) => ({ a: i / CAKE_N * Math.PI * 2, gone: false, held: false })); },
+  started() { return this.n > 0; },
+  result() { return this.n + '個'; },
+  commit(tot) { add(tot, 'cake', this.n); add(tot, 'cakeRedo', this.n >= CAKE_REDO ? 1 : 0); mx(tot, 'cakeMax', this.n); },
+  geo() { const s = SC(), rx = Math.min(W * 0.42, 160 * s); return { s, cx: W / 2, cy: H * 0.36, rx, ry: rx * 0.46, ch: 92 * s }; },
+  bpos(b, g, dx) { return [g.cx + (dx || 0) + Math.cos(b.a) * g.rx * 0.76, g.cy + Math.sin(b.a) * g.ry * 0.8 - 12 * g.s]; },
+  down(id, x, y) { // いちばん近いいちごをつまむ
+    if (this.slide > 0 || this.wait > 0) return;
+    const g = this.geo(); let best = null, bd = CAKE_GRAB * g.s;
+    for (const b of this.berries) { if (b.gone || b.held) continue; const [bx, by] = this.bpos(b, g), d = Math.hypot(x - bx, y - by); if (d < bd) { bd = d; best = b; } }
+    if (best) { best.held = true; this.ptr[id] = { b: best, x, y, x0: x, y0: y }; }
+  },
+  move(id, x, y) {
+    const p = this.ptr[id]; if (!p) return;
+    p.x = x; p.y = y;
+    if (Math.hypot(x - p.x0, y - p.y0) > CAKE_PULL * SC()) { // パクッ
+      p.b.gone = true; p.b.held = false; delete this.ptr[id];
+      this.bites.push({ x, y, t: 0.45 }); sfx.bite();
+      if (scoring()) { this.n++; if (this.n === CAKE_REDO) { this.say = 'いちごが ひとつもない！'; this.sayT = 1; } }
+      if (this.berries.every(b => b.gone)) this.wait = 0.25;
+    }
+  },
+  up(id) {
+    const drop = p => { p.b.held = false; };
+    if (id == null) { Object.values(this.ptr).forEach(drop); this.ptr = {}; return; }
+    const p = this.ptr[id]; if (p) { drop(p); delete this.ptr[id]; }
+  },
+  update(dt) {
+    this.sayT = Math.max(0, this.sayT - dt);
+    for (let i = this.bites.length - 1; i >= 0; i--) { this.bites[i].t -= dt; if (this.bites[i].t <= 0) this.bites.splice(i, 1); }
+    if (this.wait > 0) { this.wait -= dt; if (this.wait <= 0) { this.old = this.berries; this.berries = this.newCake(); this.slide = 1; } } // 空になったら次のケーキ
+    if (this.slide > 0) { this.slide = Math.max(0, this.slide - dt / 0.35); if (this.slide === 0) this.old = null; }
+  },
+  berry(x, y, k) { // いちご（へたつき）
+    const s = SC() * k;
+    ctx.beginPath(); ctx.moveTo(x, y + 18 * s); ctx.bezierCurveTo(x - 20 * s, y + 4 * s, x - 16 * s, y - 14 * s, x, y - 12 * s); ctx.bezierCurveTo(x + 16 * s, y - 14 * s, x + 20 * s, y + 4 * s, x, y + 18 * s);
+    ctx.fillStyle = '#ff3b4e'; ctx.fill(); ctx.lineWidth = 2.5; ctx.strokeStyle = INK; ctx.stroke();
+    ctx.fillStyle = '#ffe680'; for (const [a, b] of [[-6, -2], [5, -3], [0, 5], [-7, 7], [7, 6]]) ctx.fillRect(x + a * s - 1, y + b * s - 1, 2.5, 2.5);
+    ctx.fillStyle = '#4caf50'; ctx.beginPath(); ctx.moveTo(x - 12 * s, y - 12 * s); ctx.lineTo(x, y - 6 * s); ctx.lineTo(x + 12 * s, y - 12 * s); ctx.lineTo(x, y - 18 * s); ctx.closePath(); ctx.fill(); ctx.stroke();
+  },
+  cakeDraw(dx, berries, held) {
+    const g = this.geo(), s = g.s, cx = g.cx + dx;
+    ctx.lineWidth = 3; ctx.strokeStyle = INK;
+    ctx.beginPath(); ctx.ellipse(cx, g.cy + g.ch + 8 * s, g.rx * 1.18, g.ry * 1.2, 0, 0, Math.PI * 2); ctx.fillStyle = '#dfe9f2'; ctx.fill(); ctx.stroke(); // お皿
+    ctx.beginPath(); ctx.moveTo(cx - g.rx, g.cy); ctx.lineTo(cx - g.rx, g.cy + g.ch); ctx.ellipse(cx, g.cy + g.ch, g.rx, g.ry, 0, Math.PI, 0, true); ctx.lineTo(cx + g.rx, g.cy); ctx.closePath(); ctx.fillStyle = PAPER; ctx.fill(); ctx.stroke(); // 横のクリーム
+    ctx.fillStyle = '#ffe9a8'; ctx.fillRect(cx - g.rx + 2, g.cy + g.ch * 0.45, g.rx * 2 - 4, 10 * s); // スポンジの切れ目っぽい帯
+    ctx.beginPath(); ctx.ellipse(cx, g.cy, g.rx, g.ry, 0, 0, Math.PI * 2); ctx.fillStyle = '#fffaf0'; ctx.fill(); ctx.stroke(); // 上の面
+    for (let i = 0; i < 14; i++) { const a = i / 14 * Math.PI; ctx.beginPath(); ctx.arc(cx + Math.cos(a) * g.rx * 0.98, g.cy + g.ch + Math.sin(a) * g.ry - 4 * s, 6 * s, 0, Math.PI * 2); ctx.fillStyle = PAPER; ctx.fill(); ctx.lineWidth = 1.5; ctx.stroke(); } // すその飾り
+    ctx.lineWidth = 3;
+    const order = berries.slice().sort((a, b) => Math.sin(a.a) - Math.sin(b.a));
+    const one = b => {
+      const [bx, by] = this.bpos(b, g, dx);
+      ctx.beginPath(); ctx.ellipse(bx, by + 10 * s, 15 * s, 8 * s, 0, 0, Math.PI * 2); ctx.fillStyle = PAPER; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = INK; ctx.stroke(); // クリームの台
+      if (b.gone) { ctx.beginPath(); ctx.ellipse(bx, by + 8 * s, 7 * s, 3.5 * s, 0, 0, Math.PI * 2); ctx.fillStyle = 'rgba(255,59,78,.3)'; ctx.fill(); } // いちごのあと
+      else if (!b.held) this.berry(bx, by - 4 * s, 1);
+    };
+    order.filter(b => Math.sin(b.a) < 0).forEach(one);
+    rr(cx - 58 * s, g.cy - 24 * s, 116 * s, 28 * s, 8 * s); ctx.fillStyle = '#6b4226'; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = INK; ctx.stroke(); // チョコのプレート
+    ctx.fillStyle = PAPER; ctx.font = `${Math.round(13 * s)}px ${DISPLAY}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('みんなで たべよう', cx, g.cy - 10 * s); ctx.textAlign = 'left';
+    order.filter(b => Math.sin(b.a) >= 0).forEach(one);
+  },
+  draw() {
+    const g = this.geo(), s = g.s;
+    ctx.fillStyle = this.bg; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#c98a5a'; ctx.fillRect(0, H * 0.56, W, H * 0.44); ctx.fillStyle = INK; ctx.fillRect(0, H * 0.56 - 2, W, 3); // テーブル
+    ctx.fillStyle = 'rgba(255,255,255,.5)'; for (let x = 0; x < W; x += 40 * s) ctx.fillRect(x, H * 0.56, 20 * s, H * 0.44); // テーブルクロスのしま
+    if (this.slide > 0) { if (this.old) this.cakeDraw(-(1 - this.slide) * W, this.old); this.cakeDraw(this.slide * W, this.berries); }
+    else this.cakeDraw(0, this.berries);
+    for (const p of Object.values(this.ptr)) this.berry(p.x, p.y - 10 * s, 1.25); // つまんでいるいちご
+    for (const b of this.bites) bigText('パクッ', b.x, b.y - 40 * s - (0.45 - b.t) * 60 * s, Math.round(26 * s), HOT, PAPER);
+    if (this.sayT > 0) bigText(this.say, W / 2, H * 0.18, Math.round(30 * s), HOT, PAPER, W * 0.9);
+  },
+  drawHint(t) { const g = this.geo(), p = (t * 1.2) % 1, [bx, by] = this.bpos(this.berries.find(b => !b.gone) || this.berries[0], g); finger(bx + p * 40 * g.s, by - p * 50 * g.s, 0.9); }
+};
+
+/* ---------- 大盛り23: 入浴剤 ---------- */
+const BATH_SEC = 30;   // あわを流して、湯船を洗う（1個）
+const BATH_TOSS = 30;  // 押した所からこの長さ px（SC()）以上 上へ動かして離すと、投げる
+const BATH_REDO = 6, BATH_YEN = 1000; // 1回でこの数以上入れたら、お湯を全部入れ替え（水道代・ガス代）
+const BATH_C = ['#ff7eb6', '#5ab0ff', '#ffd23f', '#6fdc8c', '#b58cff', '#ff9e3d'];
+const bath = {
+  key: 'bath', name: '入浴剤', prompt: '入れろ！', hint: '上に投げて 湯船へ', bg: '#dff1f7',
+  bgm: song(120, [
+    ['bub', 0.08, '72 . 76 . 79 . 76 . 74 . 77 . 81 . . . 72 . 76 . 79 . 84 . 83 . 79 . 76 . . .'],
+    ['triangle', 0.13, '48 . . . . . 55 . 50 . . . . . 57 . 48 . . . . . 55 . 43 . . . . . 50 .']
+  ], ['k..hs..hk..hs.hh']),
+  shop: [['入浴剤のセット', '入浴剤 セット'], ['バスボム', 'バスボム']],
+  bill(t) { const n = t.bath || 0, r = t.bathRedo || 0; return { v: n + '個', n: (r ? 'お湯の入れ替え・' : '') + 'あわを流して湯船を洗う', sec: n * BATH_SEC, yen: r * BATH_YEN }; },
+  init() { this.n = 0; this.ptr = {}; this.fly = []; this.fizz = []; this.bub = []; this.cols = ['#a8dcf5']; this.foam = 0; this.ci = Math.floor(Math.random() * BATH_C.length); this.say = ''; this.sayT = 0; this.over = []; },
+  started() { return this.n > 0; },
+  result() { return this.n + '個'; },
+  commit(tot) { add(tot, 'bath', this.n); add(tot, 'bathRedo', this.n >= BATH_REDO ? 1 : 0); mx(tot, 'bathMax', this.n); },
+  geo() { const s = SC(); return { s, x: W * 0.06, w: W * 0.88, ty: H * 0.42, by: H * 0.58, wy: H * 0.42 + 18 * s, floor: H * 0.74, kx: W / 2, ky: H * 0.87 }; },
+  down(id, x, y) { this.ptr[id] = { x, y, x0: x, y0: y, c: BATH_C[this.ci++ % BATH_C.length] }; }, // どこを押しても、かごから1個手に取る
+  move(id, x, y) { const p = this.ptr[id]; if (p) { p.x = x; p.y = y; } },
+  up(id) {
+    if (id == null) { this.ptr = {}; return; }
+    const p = this.ptr[id]; delete this.ptr[id]; if (!p) return;
+    const s = SC(); if (p.y0 - p.y < BATH_TOSS * s) return; // 上へ動かしていなければ、かごにもどす
+    const g = this.geo(), tx = clamp(p.x + (p.x - p.x0) * 0.8, g.x + 40 * s, g.x + g.w - 40 * s);
+    this.fly.push({ x0: p.x, y0: p.y, tx, ty: g.wy + 6 * s, u: 0, c: p.c }); sfx.toss(); // ポイッ。湯船のどこかに必ず入る
+    if (scoring()) { this.n++; if (this.n === BATH_REDO) { this.say = 'あわが あふれた！'; this.sayT = 1; } }
+  },
+  update(dt) {
+    const g = this.geo(), s = g.s;
+    this.sayT = Math.max(0, this.sayT - dt);
+    for (let i = this.fly.length - 1; i >= 0; i--) {
+      const f = this.fly[i]; f.u += dt / 0.42;
+      if (f.u >= 1) { this.fly.splice(i, 1); this.fizz.push({ x: f.tx, c: f.c, t: 1.2 }); this.cols.push(f.c); if (this.cols.length > 5) this.cols.shift(); this.foam = Math.min(1.8, this.foam + 0.22); sfx.plop(); sfx.pssh(); }
+    }
+    for (let i = this.fizz.length - 1; i >= 0; i--) {
+      const f = this.fizz[i]; f.t -= dt;
+      if (Math.random() < dt * 40) this.bub.push({ x: f.x + rnd(-14, 14) * s, y: g.wy, vy: -rnd(30, 90) * s, r: rnd(3, 8) * s, c: f.c, t: rnd(0.4, 0.9) });
+      if (f.t <= 0) this.fizz.splice(i, 1);
+    }
+    for (let i = this.bub.length - 1; i >= 0; i--) { const b = this.bub[i]; b.y += b.vy * dt; b.t -= dt; if (b.t <= 0) this.bub.splice(i, 1); }
+    if (this.foam > 1 && Math.random() < dt * (this.foam - 1) * 30) this.over.push({ x: Math.random() < 0.5 ? g.x + rnd(-6, 10) * s : g.x + g.w + rnd(-10, 6) * s, y: g.ty, vy: rnd(20, 60) * s, r: rnd(8, 16) * s }); // あふれたあわが、ふちからたれる
+    for (const o of this.over) { if (o.y < g.floor + rnd(0, 30) * s) o.y += o.vy * dt; }
+    if (this.over.length > 80) this.over.shift();
+  },
+  ball(x, y, c, k) { const s = SC() * (k || 1); ctx.beginPath(); ctx.arc(x, y, 16 * s, 0, Math.PI * 2); ctx.fillStyle = c; ctx.fill(); ctx.lineWidth = 2.5; ctx.strokeStyle = INK; ctx.stroke(); ctx.beginPath(); ctx.arc(x - 5 * s, y - 5 * s, 4 * s, 0, Math.PI * 2); ctx.fillStyle = 'rgba(255,255,255,.6)'; ctx.fill(); },
+  draw() {
+    const g = this.geo(), s = g.s;
+    ctx.fillStyle = this.bg; ctx.fillRect(0, 0, W, g.floor);
+    ctx.strokeStyle = 'rgba(80,140,170,.25)'; ctx.lineWidth = 2; for (let x = 0; x < W; x += 32 * s) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, g.floor); ctx.stroke(); } for (let y = 0; y < g.floor; y += 32 * s) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); } // タイル
+    ctx.fillStyle = '#c9d6dc'; ctx.fillRect(0, g.floor, W, H - g.floor); ctx.fillStyle = INK; ctx.fillRect(0, g.floor - 2, W, 3);
+    // 蛇口と湯気
+    ctx.lineWidth = 3; ctx.strokeStyle = INK;
+    rr(W * 0.7, g.ty - 70 * s, 16 * s, 40 * s, 4 * s); ctx.fillStyle = '#c0c8d0'; ctx.fill(); ctx.stroke();
+    rr(W * 0.62, g.ty - 74 * s, 70 * s, 14 * s, 6 * s); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.arc(W * 0.72, g.ty - 84 * s, 10 * s, 0, Math.PI * 2); ctx.fillStyle = HOT; ctx.fill(); ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.lineWidth = 5 * s; ctx.lineCap = 'round';
+    for (let i = 0; i < 3; i++) { const x = W * (0.3 + i * 0.18), y = g.ty - 30 * s - ((clock * 30 + i * 20) % 50) * s; ctx.beginPath(); ctx.moveTo(x, y + 30 * s); ctx.bezierCurveTo(x - 10 * s, y + 20 * s, x + 10 * s, y + 10 * s, x, y); ctx.stroke(); }
+    ctx.lineCap = 'butt'; ctx.lineWidth = 3; ctx.strokeStyle = INK;
+    // 湯船とお湯（入れた色が、まだらに混ざる）
+    rr(g.x, g.ty, g.w, g.floor - g.ty, 18 * s); ctx.fillStyle = PAPER; ctx.fill(); ctx.stroke();
+    ctx.save(); rr(g.x + 10 * s, g.wy, g.w - 20 * s, g.by - g.wy, 12 * s); ctx.clip();
+    ctx.fillStyle = this.cols[this.cols.length - 1]; ctx.fillRect(g.x, g.wy, g.w, g.by - g.wy);
+    this.cols.slice(0, -1).forEach((c, i) => { ctx.globalAlpha = 0.55; ctx.fillStyle = c; ctx.beginPath(); ctx.ellipse(g.x + g.w * (0.2 + ((i * 0.31 + clock * 0.05) % 0.7)), g.wy + (g.by - g.wy) * (0.3 + (i % 2) * 0.35), 60 * s, 18 * s, Math.sin(clock + i) * 0.3, 0, Math.PI * 2); ctx.fill(); });
+    ctx.globalAlpha = 1; ctx.restore();
+    rr(g.x, g.by, g.w, g.floor - g.by, 10 * s); ctx.fillStyle = '#e4eef2'; ctx.fill(); ctx.stroke(); // 湯船の前の板
+    const dx = g.x + g.w * 0.75 + Math.sin(clock * 1.5) * 10 * s, dy = g.wy + 14 * s + Math.sin(clock * 3) * 2 * s; // おもちゃのアヒル
+    ctx.beginPath(); ctx.ellipse(dx, dy, 20 * s, 12 * s, 0, 0, Math.PI * 2); ctx.fillStyle = POP; ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.arc(dx - 12 * s, dy - 14 * s, 9 * s, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(dx - 20 * s, dy - 15 * s); ctx.lineTo(dx - 29 * s, dy - 12 * s); ctx.lineTo(dx - 20 * s, dy - 10 * s); ctx.closePath(); ctx.fillStyle = '#ff9e3d'; ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.arc(dx - 13 * s, dy - 16 * s, 1.8 * s, 0, Math.PI * 2); ctx.fillStyle = INK; ctx.fill();
+    ctx.beginPath(); ctx.moveTo(W * 0.08, H * 0.8); ctx.lineTo(W * 0.24, H * 0.8); ctx.lineTo(W * 0.22, H * 0.9); ctx.lineTo(W * 0.1, H * 0.9); ctx.closePath(); ctx.fillStyle = '#d8b075'; ctx.fill(); ctx.stroke(); // 桶
+    for (const b of this.bub) { ctx.globalAlpha = clamp(b.t * 2, 0, 1); ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2); ctx.fillStyle = b.c; ctx.fill(); ctx.lineWidth = 1.5; ctx.stroke(); } ctx.globalAlpha = 1;
+    // あわ（入れるほど高くなる）
+    if (this.foam > 0) {
+      const fh = Math.min(this.foam, 1.2) * 46 * s;
+      ctx.fillStyle = '#ffffff'; ctx.strokeStyle = 'rgba(35,27,46,.35)'; ctx.lineWidth = 1.5;
+      for (let i = 0; i < 16; i++) { const x = g.x + 18 * s + i * (g.w - 36 * s) / 15, r = (10 + sr(i) * 10) * s * (0.6 + this.foam * 0.4); ctx.beginPath(); ctx.arc(x, g.wy - fh * (0.4 + sr(i + 3) * 0.6) + Math.sin(clock * 3 + i) * 2 * s, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }
+    }
+    for (const o of this.over) { ctx.beginPath(); ctx.arc(o.x, o.y, o.r, 0, Math.PI * 2); ctx.fillStyle = '#ffffff'; ctx.fill(); ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(35,27,46,.35)'; ctx.stroke(); }
+    // かご（入浴剤がいっぱい）
+    ctx.lineWidth = 3; ctx.strokeStyle = INK;
+    for (let i = 0; i < 5; i++) this.ball(g.kx - 48 * s + i * 24 * s, g.ky - 18 * s - (i % 2) * 6 * s, BATH_C[(this.ci + i) % BATH_C.length], 0.8);
+    rr(g.kx - 70 * s, g.ky - 14 * s, 140 * s, 44 * s, 10 * s); ctx.fillStyle = '#d8b075'; ctx.fill(); ctx.stroke();
+    ctx.strokeStyle = 'rgba(90,58,34,.5)'; ctx.lineWidth = 2; for (let x = g.kx - 60 * s; x < g.kx + 64 * s; x += 14 * s) { ctx.beginPath(); ctx.moveTo(x, g.ky - 12 * s); ctx.lineTo(x, g.ky + 28 * s); ctx.stroke(); }
+    for (const p of Object.values(this.ptr)) this.ball(p.x, p.y, p.c, 1.2);
+    for (const f of this.fly) { const u = f.u, x = f.x0 + (f.tx - f.x0) * u, y = f.y0 + (f.ty - f.y0) * u - 140 * s * 4 * u * (1 - u); this.ball(x, y, f.c, 1.1 - u * 0.2); }
+    if (this.sayT > 0) bigText(this.say, W / 2, H * 0.2, Math.round(32 * s), HOT, PAPER, W * 0.9);
+  },
+  drawHint(t) { const g = this.geo(), p = (t * 1.4) % 1; finger(g.kx, g.ky - p * 140 * g.s, 0.9); }
+};
+
+/* ---------- 大盛り24: 壁紙 ---------- */
+const PEEL_COLS = 3;   // 壁1面に、壁紙が縦に3枚貼ってある。全部はがしたら、となりの壁へ
+const PEEL_PX = 300;   // 指をこの長さ px（SC()）下へ動かすと、1枚が下まではがれる
+const PEEL_DONE = 0.8; // 1枚のこの割合まではがしたら、はがれきったことにする
+const PEEL_SEC = 60;   // 壁紙を貼り直す（1枚）
+const PEEL_REDO = 5, PEEL_YEN = 1000; // 1回でこの枚数以上はがしたら、業者さんに張り替えを頼む
+const PEEL_WALLS = [ // 壁ごとの壁紙。[地の色, 柄の色, 柄]
+  ['#f4f1ea', '#e2dccd', 'stripe'],
+  ['#ffd8a0', '#ff8a3d', 'flower'],
+  ['#cfe6ff', '#ffffff', 'dot'],
+  ['#d9f0d0', '#8fcf86', 'check'],
+  ['#3b3f7a', '#ffd23f', 'star']
+];
+const peel = {
+  key: 'peel', name: '壁紙', prompt: 'はがせ！', hint: '壁紙を 下に引っぱる', bg: '#f4f1ea',
+  bgm: song(140, [
+    ['wob', 0.06, '67 . . 70 . . 72 . 74 . 72 . 70 . 67 . 65 . . 67 . . 70 . 67 . . . . . . .'],
+    ['triangle', 0.13, '43 . 43 . 46 . 48 . 43 . 43 . 46 . 41 . 41 . 41 . 43 . 46 . 43 . 43 . 38 . 41 .']
+  ], ['k.s.k.sck.s.k.ss']),
+  shop: [['壁紙の補修シート', '壁紙 補修シート'], ['のりつき壁紙', 'のりつき 壁紙']],
+  bill(t) { const n = t.peel || 0, r = t.peelRedo || 0; return { v: n + '枚', n: (r ? '業者さんに張り替えを頼む・' : '') + '壁紙を貼り直す', sec: n * PEEL_SEC, yen: r * PEEL_YEN }; },
+  init() { this.n = 0; this.ptr = {}; this.wall = 0; this.cols = this.newCols(); this.falling = []; this.pile = []; this.say = ''; this.sayT = 0; this.wait = 0; this.pan = 0; },
+  newCols() { return Array.from({ length: PEEL_COLS }, () => ({ f: 0, done: false })); },
+  started() { return this.n > 0 || this.cols.some(c => c.f > 0.05); },
+  result() { return this.n + '枚'; },
+  commit(tot) { add(tot, 'peel', this.n); add(tot, 'peelRedo', this.n >= PEEL_REDO ? 1 : 0); mx(tot, 'peelMax', this.n); },
+  geo() { const s = SC(); return { s, y: H * 0.1, h: H * 0.72, cw: W / PEEL_COLS, floor: H * 0.82 }; },
+  down(id, x, y) { if (this.wait > 0 || this.pan > 0) return; const g = this.geo(), c = Math.floor(clamp(x, 0, W - 1) / g.cw); if (y > g.y - 20 * g.s && y < g.floor && !this.cols[c].done) this.ptr[id] = { c, y }; },
+  move(id, x, y) { // 押した列が、指を下へ動かした分だけはがれる（上へはもどらない）
+    const p = this.ptr[id]; if (!p) return;
+    const col = this.cols[p.c]; if (col.done) return;
+    const dy = y - p.y; p.y = y; if (dy <= 0) return;
+    const before = col.f; col.f = Math.min(1, col.f + dy / (PEEL_PX * SC()));
+    if (Math.floor(before * 8) !== Math.floor(col.f * 8)) sfx.rip();
+    if (col.f >= PEEL_DONE) this.off(p.c);
+  },
+  up(id) { if (id == null) this.ptr = {}; else delete this.ptr[id]; },
+  off(c) { // 1枚はがれきって、くるくる巻いたのが床に落ちる
+    const g = this.geo(), s = g.s, col = this.cols[c]; col.done = true;
+    this.falling.push({ x: (c + 0.5) * g.cw, y: g.floor - 20 * s, vy: 0, c: PEEL_WALLS[this.wall % PEEL_WALLS.length] });
+    for (const k in this.ptr) if (this.ptr[k].c === c) delete this.ptr[k];
+    if (scoring()) { this.n++; if (this.n === PEEL_REDO) { this.say = '壁がボロボロ！'; this.sayT = 1; } }
+    sfx.slide();
+    if (this.cols.every(k => k.done)) { this.wait = 0.25; this.ptr = {}; if (this.sayT < 0.5) { this.say = 'となりの壁へ！'; this.sayT = 0.7; } } // 1面ぜんぶはがしたら、となりの壁へ
+  },
+  update(dt) {
+    const g = this.geo(), s = g.s;
+    this.sayT = Math.max(0, this.sayT - dt);
+    if (this.wait > 0) { this.wait -= dt; if (this.wait <= 0) this.pan = 1; }
+    if (this.pan > 0) { this.pan = Math.max(0, this.pan - dt / 0.35); if (this.pan === 0) { this.wall++; this.cols = this.newCols(); } }
+    for (let i = this.falling.length - 1; i >= 0; i--) { const f = this.falling[i]; f.vy += 1600 * s * dt; f.y += f.vy * dt; if (f.y > g.floor + 24 * s) { this.pile.push({ x: f.x + rnd(-20, 20) * s, y: g.floor + rnd(16, H - g.floor - 20 * s), r: rnd(-0.5, 0.5), c: f.c }); if (this.pile.length > 16) this.pile.shift(); this.falling.splice(i, 1); sfx.thud(); } }
+  },
+  pat(L, x, y, w, h, ox) { // 壁紙の柄（ox: 壁の左の端。列をまたいで柄がそろうように、壁全体の位置で描く）
+    const s = SC(), [base, ink, kind] = L, y0 = this.geo().y, x1 = x + w;
+    ctx.save(); ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
+    ctx.fillStyle = base; ctx.fillRect(x, y, w, h); ctx.fillStyle = ink; ctx.strokeStyle = ink;
+    if (kind === 'stripe') for (let xx = ox; xx < x1; xx += 24 * s) ctx.fillRect(xx, y, 6 * s, h);
+    else if (kind === 'dot') for (let yy = y0, r = 0; yy < y + h + 30 * s; yy += 30 * s, r++) for (let xx = ox + (r % 2) * 15 * s; xx < x1 + 10 * s; xx += 30 * s) { ctx.beginPath(); ctx.arc(xx, yy, 6 * s, 0, Math.PI * 2); ctx.fill(); }
+    else if (kind === 'check') { ctx.globalAlpha = 0.5; for (let xx = ox; xx < x1; xx += 40 * s) ctx.fillRect(xx, y, 20 * s, h); for (let yy = y0; yy < y + h; yy += 40 * s) ctx.fillRect(x, yy, w, 20 * s); }
+    else if (kind === 'flower') for (let yy = y0 + 20 * s, r = 0; yy < y + h + 40 * s; yy += 46 * s, r++) for (let xx = ox + (r % 2) * 23 * s + 12 * s; xx < x1 + 20 * s; xx += 46 * s) { for (let k = 0; k < 5; k++) { const a = k / 5 * Math.PI * 2; ctx.beginPath(); ctx.arc(xx + Math.cos(a) * 7 * s, yy + Math.sin(a) * 7 * s, 5 * s, 0, Math.PI * 2); ctx.fill(); } ctx.fillStyle = '#ffd23f'; ctx.beginPath(); ctx.arc(xx, yy, 4 * s, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = ink; }
+    else if (kind === 'star') for (let yy = y0 + 16 * s, r = 0; yy < y + h + 30 * s; yy += 36 * s, r++) for (let xx = ox + (r % 2) * 18 * s + 10 * s; xx < x1 + 10 * s; xx += 36 * s) { ctx.beginPath(); for (let k = 0; k < 10; k++) { const a = -Math.PI / 2 + k * Math.PI / 5, d = (k % 2 ? 3 : 7) * s; ctx[k ? 'lineTo' : 'moveTo'](xx + Math.cos(a) * d, yy + Math.sin(a) * d); } ctx.closePath(); ctx.fill(); }
+    ctx.restore();
+  },
+  board(x, y, w, h) { // 壁紙の下の板（灰色、くぎの点）
+    const s = SC();
+    ctx.fillStyle = '#cfc9bd'; ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = 'rgba(35,27,46,.35)'; for (let yy = y + 30 * s; yy < y + h; yy += 60 * s) { ctx.beginPath(); ctx.arc(x + 10 * s, yy, 2 * s, 0, Math.PI * 2); ctx.arc(x + w - 10 * s, yy, 2 * s, 0, Math.PI * 2); ctx.fill(); }
+  },
+  rollDraw(x, y, w, k, L) { // くるくる巻いた壁紙（うらは白、外側に柄が少し見える）
+    const s = SC(), r = (6 + k * 10) * s;
+    ctx.save(); ctx.lineWidth = 2.5; ctx.strokeStyle = INK;
+    rr(x - w / 2, y - r, w, r * 2, r); ctx.fillStyle = '#fbfaf6'; ctx.fill(); ctx.stroke();
+    ctx.fillStyle = L[0]; ctx.fillRect(x - w / 2 + r, y + r * 0.2, w - r * 2, r * 0.6);
+    ctx.beginPath(); ctx.ellipse(x - w / 2 + r, y, r * 0.5, r * 0.9, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+  },
+  wallDraw(ox, wi, cols) { // 壁1面（ox: 左の端）
+    const g = this.geo(), s = g.s, L = PEEL_WALLS[wi % PEEL_WALLS.length];
+    cols.forEach((c, i) => {
+      const x = ox + i * g.cw, fy = g.y + c.f * g.h;
+      this.board(x, g.y, g.cw, g.floor - g.y);
+      if (!c.done) {
+        this.pat(L, x, fy, g.cw, g.floor - fy, ox);
+        if (c.f > 0) { const gr = ctx.createLinearGradient(0, fy, 0, fy + 24 * s); gr.addColorStop(0, 'rgba(0,0,0,.25)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = gr; ctx.fillRect(x, fy, g.cw, 24 * s); this.rollDraw(x + g.cw / 2, fy, g.cw - 6 * s, c.f, L); }
+        else { ctx.beginPath(); ctx.moveTo(x + g.cw - 30 * s, g.y); ctx.lineTo(x + g.cw - 3 * s, g.y); ctx.lineTo(x + g.cw - 3 * s, g.y + 27 * s); ctx.closePath(); ctx.fillStyle = '#fbfaf6'; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = INK; ctx.stroke(); } // めくれかけの角
+      }
+      ctx.fillStyle = 'rgba(35,27,46,.25)'; ctx.fillRect(x + g.cw - 1, g.y, 2, g.h); // つなぎ目
+    });
+    ctx.fillStyle = INK; ctx.fillRect(ox - 2, g.y, 4, g.floor - g.y); // 部屋のすみ
+  },
+  draw() {
+    const g = this.geo(), s = g.s;
+    ctx.fillStyle = PAPER; ctx.fillRect(0, 0, W, g.y); ctx.fillStyle = INK; ctx.fillRect(0, g.y - 2, W, 3); // 天井
+    if (this.pan > 0) { this.wallDraw(-(1 - this.pan) * W, this.wall, this.cols); this.wallDraw(this.pan * W, this.wall + 1, this.newCols()); } // となりの壁へ移る
+    else this.wallDraw(0, this.wall, this.cols);
+    ctx.fillStyle = '#8a5a32'; ctx.fillRect(0, g.floor, W, 14 * s); ctx.fillStyle = '#d9a066'; ctx.fillRect(0, g.floor + 14 * s, W, H - g.floor); ctx.fillStyle = INK; ctx.fillRect(0, g.floor - 2, W, 3);
+    for (const p of this.pile) { ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.r); this.rollDraw(0, 0, g.cw * 0.7, 1, p.c); ctx.restore(); }
+    for (const f of this.falling) this.rollDraw(f.x, f.y, g.cw - 6 * s, 1, f.c);
+    if (this.sayT > 0) bigText(this.say, W / 2, g.y + 50 * s, Math.round(30 * s), HOT, PAPER, W * 0.9);
+  },
+  drawHint(t) { const g = this.geo(), p = (t * 1.1) % 1, c = this.cols.findIndex(k => !k.done); finger((Math.max(0, c) + 0.5) * g.cw, g.y + 30 * g.s + p * 200 * g.s, 0.9); }
+};
+
+/* ---------- 大盛り25: 靴ひも ---------- */
+const LACE_SEC = 15;   // 結び目をほどく（1か所）
+const LACE_GRAB = 80, LACE_PASS = 48; // 靴の真ん中からこの距離 px（SC()。大きい靴は大きさを掛ける）：押しはじめ・離すとき／なぞっている途中
+const LACE_MOVE = 40; // 押した所からこの距離 px（SC()）以上なぞっていないと、離しても結ばない
+const LACE_BUY = 10, LACE_YEN = 1000; // 1回でこの数以上結んだら、ほどけないので切って、靴ひもの買い直し
+const LACE_SHOES = [['#4f86f7', '#ffffff', 1.15], ['#ff5a4e', '#ffd23f', 1], ['#5fb35a', '#ffffff', 0.85], ['#ffd23f', '#ff5a4e', 0.72]]; // 1足ずつ：靴の色・ひもの色・大きさ
+const laces = {
+  key: 'laces', name: '靴ひも', prompt: '結べ！', hint: '靴から靴へ なぞって 結ぶ', bg: '#e8e1d6',
+  bgm: song(146, [
+    ['pluck', 0.09, '72 74 76 . 79 . 76 . 72 74 76 . 81 . 79 . 77 76 74 . 72 . 74 . 76 . 72 . 67 . . .'],
+    ['triangle', 0.13, '48 . . . 55 . . . 48 . . . 57 . . . 53 . . . 55 . . . 48 . . . 43 . . .']
+  ], ['k.h.k.hsk.h.k.hs']),
+  shop: [['靴ひも', '靴ひも'], ['結ばない靴ひも', '結ばない靴ひも']],
+  bill(t) { const n = t.laces || 0, b = t.lacesBuy || 0; return { v: n + '個', n: (b ? '靴ひもの買い直し・' : '') + '結び目をほどく', sec: n * LACE_SEC, yen: b * LACE_YEN }; },
+  init() { this.n = 0; this.ptr = {}; this.ties = []; this.jig = new Array(8).fill(0); this.say = ''; this.sayT = 0; },
+  started() { return this.n > 0; },
+  result() { return this.n + '個'; },
+  commit(tot) { add(tot, 'laces', this.n); add(tot, 'lacesBuy', this.n >= LACE_BUY ? 1 : 0); mx(tot, 'lacesMax', this.n); },
+  geo() { const s = SC(); return { s, top: H * 0.3, step: H * 0.84 }; },
+  shoes() { // 4足を2列に。0〜7（2つずつが1足）
+    const g = this.geo(), s = g.s;
+    return Array.from({ length: 8 }, (_, i) => { const p = i >> 1, [c, l, k] = LACE_SHOES[p]; return { x: W * (0.15 + (p % 2) * 0.48 + (i % 2) * 0.22), y: g.top + (p < 2 ? 0.22 : 0.56) * (g.step - g.top), c, l, k, i }; });
+  },
+  hit(x, y, r, not) { let best = -1, bd = 1e9; for (const sh of this.shoes()) { if (sh.i === not) continue; const d = Math.hypot(x - sh.x, y - sh.y); if (d < r * SC() * Math.max(sh.k, 0.9) && d < bd) { bd = d; best = sh.i; } } return best; },
+  down(id, x, y) { const i = this.hit(x, y, LACE_GRAB); if (i >= 0) this.ptr[id] = { from: i, x, y, x0: x, y0: y, came: -1 }; },
+  move(id, x, y) { // なぞっている途中で別の靴に触れたら、そこで結んで、その靴から続ける（いま離れた靴とは、指がその靴から出るまで結ばない）
+    const p = this.ptr[id]; if (!p) return;
+    p.x = x; p.y = y;
+    if (p.prev != null) { const q = this.shoes()[p.prev]; if (Math.hypot(x - q.x, y - q.y) > LACE_PASS * SC() * Math.max(q.k, 0.9)) p.prev = null; }
+    const to = this.hit(x, y, LACE_PASS, p.from); if (to >= 0 && to !== p.prev) { this.tie(p.from, to); p.prev = p.came = p.from; p.from = to; }
+  },
+  up(id) {
+    if (id == null) { this.ptr = {}; return; }
+    const p = this.ptr[id]; delete this.ptr[id]; if (!p) return;
+    if (Math.hypot(p.x - p.x0, p.y - p.y0) < LACE_MOVE * SC()) return; // 押して離しただけでは結ばない
+    const to = this.hit(p.x, p.y, LACE_GRAB, p.from); if (to >= 0 && to !== p.came) this.tie(p.from, to); // いまなぞって来た靴とは結び直さない
+  },
+  tie(a, b) {
+    const sh = this.shoes();
+    this.ties.push({ a, b, c: sh[a].l, sag: rnd(-1, 1) }); if (this.ties.length > 80) this.ties.shift();
+    this.jig[a] = this.jig[b] = 0.3; sfx.knot();
+    if (scoring()) { this.n++; if (this.n === LACE_BUY) { this.say = 'もう ほどけない…！'; this.sayT = 1; } else if (this.sayT <= 0) { this.say = 'ギュッ！'; this.sayT = 0.35; } }
+  },
+  update(dt) { this.sayT = Math.max(0, this.sayT - dt); for (let i = 0; i < 8; i++) this.jig[i] = Math.max(0, this.jig[i] - dt); },
+  shoe(sh, jig) { // 上から見たスニーカー（つま先が上）
+    const s = SC() * sh.k, x = sh.x + (jig > 0 && !calm ? Math.sin(clock * 60) * 3 : 0), y = sh.y;
+    ctx.save(); ctx.translate(x, y); ctx.rotate(sh.i % 2 ? 0.06 : -0.06); ctx.lineWidth = 3; ctx.strokeStyle = INK;
+    ctx.beginPath(); ctx.ellipse(0, 0, 26 * s, 50 * s, 0, 0, Math.PI * 2); ctx.fillStyle = '#ffffff'; ctx.fill(); ctx.stroke(); // 靴底
+    ctx.beginPath(); ctx.ellipse(0, 2 * s, 21 * s, 44 * s, 0, 0, Math.PI * 2); ctx.fillStyle = sh.c; ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(0, 26 * s, 12 * s, 14 * s, 0, 0, Math.PI * 2); ctx.fillStyle = '#3a3040'; ctx.fill(); // はき口
+    ctx.strokeStyle = sh.l; ctx.lineWidth = 3 * s; for (let k = 0; k < 4; k++) { const yy = -18 * s + k * 9 * s; ctx.beginPath(); ctx.moveTo(-9 * s, yy); ctx.lineTo(9 * s, yy + 6 * s); ctx.moveTo(9 * s, yy); ctx.lineTo(-9 * s, yy + 6 * s); ctx.stroke(); } // ひも
+    ctx.restore();
+  },
+  lace(x1, y1, x2, y2, c, sag, knot) { // たるんだひも（まん中に結び目）
+    const s = SC(), mx2 = (x1 + x2) / 2, my = (y1 + y2) / 2, d = Math.hypot(x2 - x1, y2 - y1) || 1, nx = -(y2 - y1) / d, ny = (x2 - x1) / d, k = (20 + d * 0.15) * sag, cx = mx2 + nx * k, cy = my + ny * k + 16 * s;
+    ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.quadraticCurveTo(cx, cy, x2, y2); ctx.lineWidth = 6 * s; ctx.strokeStyle = INK; ctx.stroke(); ctx.lineWidth = 3.5 * s; ctx.strokeStyle = c; ctx.stroke();
+    if (knot) { const qx = (x1 + 2 * cx + x2) / 4, qy = (y1 + 2 * cy + y2) / 4; for (const a of [-1, 1]) { ctx.beginPath(); ctx.ellipse(qx + a * 8 * s, qy, 8 * s, 5 * s, a * 0.4, 0, Math.PI * 2); ctx.lineWidth = 5 * s; ctx.strokeStyle = INK; ctx.stroke(); ctx.lineWidth = 2.5 * s; ctx.strokeStyle = c; ctx.stroke(); } }
+    ctx.lineCap = 'butt';
+  },
+  draw() {
+    const g = this.geo(), s = g.s, sh = this.shoes();
+    ctx.fillStyle = this.bg; ctx.fillRect(0, 0, W, g.top);
+    ctx.lineWidth = 3; ctx.strokeStyle = INK; rr(W * 0.3, g.top - H * 0.24, W * 0.4, H * 0.24 + 4, 6 * s); ctx.fillStyle = '#9c6b45'; ctx.fill(); ctx.stroke(); // 玄関のドア
+    ctx.beginPath(); ctx.arc(W * 0.64, g.top - H * 0.11, 6 * s, 0, Math.PI * 2); ctx.fillStyle = POP; ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#b9b2a6'; ctx.fillRect(0, g.top, W, g.step - g.top); ctx.fillStyle = INK; ctx.fillRect(0, g.top - 2, W, 3); // 玄関の土間（石のタイル）
+    ctx.strokeStyle = 'rgba(35,27,46,.18)'; ctx.lineWidth = 2; for (let y = g.top + 50 * s; y < g.step; y += 50 * s) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); } for (let x = 0; x < W; x += 60 * s) { ctx.beginPath(); ctx.moveTo(x, g.top); ctx.lineTo(x, g.step); ctx.stroke(); }
+    ctx.fillStyle = '#c98a5a'; ctx.fillRect(0, g.step, W, H - g.step); ctx.fillStyle = INK; ctx.fillRect(0, g.step - 2, W, 3); // 上がりかまち
+    for (const k of sh) this.shoe(k, this.jig[k.i]);
+    for (const t of this.ties) { const a = sh[t.a], b = sh[t.b]; this.lace(a.x, a.y - 6 * s, b.x, b.y - 6 * s, t.c, t.sag, true); }
+    for (const p of Object.values(this.ptr)) { const a = sh[p.from]; this.lace(a.x, a.y - 6 * s, p.x, p.y, a.l, 0.3, false); }
+    if (this.sayT > 0) bigText(this.say, W / 2, g.top - H * 0.04, Math.round(30 * s), HOT, PAPER, W * 0.9);
+  },
+  drawHint(t) { const sh = this.shoes(), p = (t * 1.1) % 1, a = sh[1], b = sh[2]; finger(a.x + (b.x - a.x) * p, a.y + (b.y - a.y) * p, 0.9); }
+};
+
+STAGE_LIST.push(gift, cake, bath, peel, laces);
+ZUKAN_EXTRA.push(
+  { id: 'gift', name: 'お詫びのお詫び', desc: '菓子折りの包み紙を1回で10箱 破る', ok: t => (t.giftMax || 0) >= 10 },
+  { id: 'cake', name: 'いちご総取り', desc: 'ケーキのいちごを1回で10個 食べる', ok: t => (t.cakeMax || 0) >= 10 },
+  { id: 'bath', name: '七色の湯', desc: '入浴剤を1回で16個 入れる', ok: t => (t.bathMax || 0) >= 16 },
+  { id: 'peel', name: 'リフォーム職人', desc: '壁紙を1回で12枚 はがす', ok: t => (t.peelMax || 0) >= 12 },
+  { id: 'laces', name: '玄関の結界', desc: '靴ひもの結び目を1回で32個 作る', ok: t => (t.lacesMax || 0) >= 32 }
+);

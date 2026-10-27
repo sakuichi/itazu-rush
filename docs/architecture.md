@@ -10,11 +10,11 @@
 ```mermaid
 flowchart TD
   P1["index.html（既存版）<br>設定なし：周回モード（10種×2周）・図鑑 itazurush-zukan"]
-  P2["oomori/index.html（大盛り）<br>window.ITAZU：ランダム20本（30種から、かぶらない20種）・既存10＋新規20種・図鑑 itazurush-oomori-zukan<br>タイトルのいたずら一覧は折りたたみ（#chipBox）"]
+  P2["oomori/index.html（大盛り）<br>window.ITAZU：ランダム20本（35種から、かぶらない20種）・既存10＋新規25種・図鑑 itazurush-oomori-zukan<br>タイトルのいたずら一覧は折りたたみ（#chipBox）"]
   CSS["shared/game.css<br>スタイル"]
   BASE["shared/base.js<br>画面・小道具・音・BGM"]
   ST["shared/stages.js<br>既存10種・共通部品・押すなボタン<br>STAGE_LIST・ZUKAN_EXTRA"]
-  EX["shared/stages-extra.js<br>新規20種（第1弾: 落書き・炭酸・プリン・シール・靴飛ばし、第2弾: カレンダー・掃除機・布団・新聞・シャボン玉、第3弾: ピアノ・枕・ソファ・電気のスイッチ・毛糸玉、第4弾: 押し入れ・ロールスクリーン・風船・時計・ハンコ）<br>STAGE_LIST と ZUKAN_EXTRA に足す"]
+  EX["shared/stages-extra.js<br>新規25種（第1弾: 落書き・炭酸・プリン・シール・靴飛ばし、第2弾: カレンダー・掃除機・布団・新聞・シャボン玉、第3弾: ピアノ・枕・ソファ・電気のスイッチ・毛糸玉、第4弾: 押し入れ・ロールスクリーン・風船・時計・ハンコ、第5弾: 菓子折り・ケーキのいちご・入浴剤・壁紙・靴ひも）<br>STAGE_LIST と ZUKAN_EXTRA に足す"]
   GAME["shared/game.js<br>設定 CONF・進行・図鑑・描画・録画・シェア・入力"]
   CH1["c/0〜5.html（既存版の挑戦状）"]
   CH2["oomori/c/0〜5.html（大盛りの挑戦状）"]
