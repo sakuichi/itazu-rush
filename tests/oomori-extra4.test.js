@@ -73,7 +73,7 @@ test('タイトル画面：いたずらの一覧は折りたたまれていて�
   const { page, errors, H } = await openOomori(browser);
   const shown = () => page.$eval('#chips', e => e.getClientRects().length > 0);
   assert.equal(await shown(), false, '最初から一覧が見えている');
-  assert.match(await page.$eval('#chipBox summary', e => e.textContent), /全35種/);
+  assert.match(await page.$eval('#chipBox summary', e => e.textContent), /全40種/);
   const btn = await page.$eval('#startBtn', e => e.getBoundingClientRect().bottom);
   assert.ok(btn <= H, `「はじめる」の下の端 ${btn}px が画面（${H}px）の外`);
   await page.click('#chipBox summary');

@@ -2210,3 +2210,496 @@ ZUKAN_EXTRA.push(
   { id: 'peel', name: 'リフォーム職人', desc: '壁紙を1回で12枚 はがす', ok: t => (t.peelMax || 0) >= 12 },
   { id: 'laces', name: '玄関の結界', desc: '靴ひもの結び目を1回で32個 作る', ok: t => (t.lacesMax || 0) >= 32 }
 );
+
+/* ===== 第6弾（2026-10-27 追加） ===== */
+Object.assign(sfx, {
+  bassa() { noise(0.12, 900, 0.7, 0.32, 'lowpass'); noise(0.06, 2600, 1, 0.16, 'bandpass', 0.02); },
+  clack() { tone(900, 600, 0.03, 0.12, 'square'); noise(0.03, 3000, 2, 0.15); },
+  spray() { for (let i = 0; i < 7; i++) noise(0.03, rnd(3000, 6000), 1.5, 0.12, 'bandpass', i * 0.025); },
+  twist() { noise(0.03, rnd(700, 1000), 3, 0.07); },
+  snap() { tone(1400, 500, 0.04, 0.18, 'square'); noise(0.05, 2500, 1, 0.2); }
+});
+
+/* ---------- 大盛り26: 傘 ---------- */
+const UMB_FLICK = 40;  // 押した所からこの長さ px（SC()）上へ動かすと、傘立ての傘が飛び出して開く
+const UMB_SEC = 20;    // 傘をたたんで、傘立てにもどす（1本）
+const UMB_BREAK = 6, UMB_YEN = 1000; // 1回でこの数以上開いたら、ぶつかって骨が折れるので、傘の買い直し
+const UMB_C = ['#ff5a4e', '#4f86f7', '#ffd23f', '#5fb35a', '#b58cff', '#ff9ecf', 'vinyl']; // vinyl はビニール傘
+const umbrella = {
+  key: 'umbrella', name: '傘', prompt: '開け！', hint: '上へはじいて 傘を開く', bg: '#e6e0f2',
+  bgm: song(144, [
+    ['square', 0.045, '72 . 74 . 76 . 79 . 81 . 79 . 76 . . . 74 . 76 . 79 . 84 . 81 . 79 . . .'],
+    ['triangle', 0.13, '48 . . . 55 . 48 . 53 . . . 57 . 53 . 50 . . . 57 . 50 . 55 . . . 43 . .']
+  ], ['k.h.s.h.k.k.s.hh']),
+  shop: [['傘', '傘'], ['ビニール傘', 'ビニール傘']],
+  bill(t) { const n = t.umbrella || 0, b = t.umbrellaBuy || 0; return { v: n + '本', n: (b ? '骨が折れた傘の買い直し・' : '') + 'たたんで傘立てにもどす', sec: n * UMB_SEC, yen: b * UMB_YEN }; },
+  init() { this.n = 0; this.ptr = {}; this.fly = []; this.opened = []; this.pops = []; this.ci = Math.floor(Math.random() * UMB_C.length); this.say = ''; this.sayT = 0; },
+  started() { return this.n > 0; },
+  result() { return this.n + '本'; },
+  commit(tot) { add(tot, 'umbrella', this.n); add(tot, 'umbrellaBuy', this.n >= UMB_BREAK ? 1 : 0); mx(tot, 'umbrellaMax', this.n); },
+  geo() { const s = SC(); return { s, wall: H * 0.44, kx: W * 0.5, ky: H * 0.93 }; },
+  down(id, x, y) { this.ptr[id] = { x0: x, y0: y }; }, // どこを押してもよい
+  move(id, x, y) {
+    const p = this.ptr[id]; if (!p || p.done) return;
+    if (p.y0 - y > UMB_FLICK * SC()) { p.done = true; this.launch(x - p.x0); } // 1回はじくと1本
+  },
+  up(id) { if (id == null) this.ptr = {}; else delete this.ptr[id]; },
+  launch(dx) { // はじいた向きのほうへ飛んで、空中でバサッと開く
+    const g = this.geo(), s = g.s, c = UMB_C[this.ci++ % UMB_C.length];
+    const tx = clamp(W / 2 + dx * 3 + rnd(-1, 1) * W * 0.28, W * 0.14, W * 0.86), ty = rnd(H * 0.52, H * 0.76);
+    this.fly.push({ x0: g.kx + rnd(-24, 24) * s, y0: g.ky - 90 * s, tx, ty, u: 0, c, rot: rnd(-0.6, 0.6), spin: rnd(-1, 1) * 6, banged: false });
+    sfx.toss();
+    if (scoring()) { this.n++; if (this.n === UMB_BREAK) { this.say = '骨が折れた…！'; this.sayT = 1; } }
+  },
+  update(dt) {
+    const s = SC();
+    this.sayT = Math.max(0, this.sayT - dt);
+    for (let i = this.fly.length - 1; i >= 0; i--) {
+      const f = this.fly[i]; f.u += dt / 0.5;
+      if (!f.banged && f.u > 0.3) { f.banged = true; sfx.bassa(); const [x, y] = this.fpos(f); this.pops.push({ x, y, t: 0.45 }); }
+      if (f.u >= 1) { // 床に落ちて、まわりの傘がゆれる
+        this.fly.splice(i, 1);
+        for (const o of this.opened) if (Math.hypot(o.x - f.tx, o.y - f.ty) < 120 * s) o.jig = 0.35;
+        this.opened.push({ x: f.tx, y: f.ty, c: f.c, rot: f.rot, jig: 0.3 }); if (this.opened.length > 24) this.opened.shift(); // 多すぎたら、いちばん古い傘から消す
+        sfx.thud();
+      }
+    }
+    for (const o of this.opened) o.jig = Math.max(0, o.jig - dt);
+    for (let i = this.pops.length - 1; i >= 0; i--) { this.pops[i].t -= dt; if (this.pops[i].t <= 0) this.pops.splice(i, 1); }
+  },
+  fpos(f) { const u = Math.min(f.u, 1), s = SC(); return [f.x0 + (f.tx - f.x0) * u, f.y0 + (f.ty - f.y0) * u - 260 * s * 4 * u * (1 - u)]; },
+  kOf(y) { return 0.65 + clamp((y - H * 0.5) / (H * 0.3), 0, 1) * 0.45; }, // 奥ほど小さく
+  canopy(x, y, c, rot, k, o) { // 開いた傘（o: 開きぐあい 0〜1）
+    const s = SC() * k, R = 64 * s, rx = R * (0.15 + 0.85 * o);
+    ctx.save(); ctx.translate(x, y); ctx.rotate(rot); ctx.lineWidth = 3; ctx.strokeStyle = INK;
+    ctx.beginPath(); ctx.moveTo(0, -R * 0.1); ctx.lineTo(0, R * 0.95); ctx.stroke(); // 柄
+    ctx.beginPath(); ctx.arc(-9 * s, R * 0.95, 9 * s, 0, Math.PI); ctx.stroke(); // 持ち手
+    ctx.beginPath(); ctx.moveTo(-rx, 0); ctx.ellipse(0, 0, rx, R * 0.8, 0, Math.PI, Math.PI * 2);
+    for (let i = 0; i < 4; i++) { const a = rx - i * rx / 2, b = a - rx / 2; ctx.quadraticCurveTo((a + b) / 2, -R * 0.14, b, 0); } // すそのギザギザ
+    ctx.closePath();
+    ctx.fillStyle = c === 'vinyl' ? 'rgba(225,238,255,.6)' : c; ctx.fill(); ctx.stroke();
+    ctx.lineWidth = 2; for (const t of [-0.5, 0, 0.5]) { ctx.beginPath(); ctx.moveTo(0, -R * 0.8); ctx.quadraticCurveTo(rx * t * 0.7, -R * 0.45, rx * t, 0); ctx.stroke(); } // 骨
+    if (c !== 'vinyl') { ctx.fillStyle = 'rgba(255,255,255,.28)'; ctx.beginPath(); ctx.moveTo(0, -R * 0.8); ctx.quadraticCurveTo(-rx * 0.35, -R * 0.45, -rx * 0.5, 0); ctx.quadraticCurveTo(-rx * 0.25, -R * 0.14, 0, 0); ctx.closePath(); ctx.fill(); }
+    ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(0, -R * 0.8); ctx.lineTo(0, -R * 0.8 - 10 * s); ctx.stroke(); // 先っぽ
+    ctx.restore();
+  },
+  closed(x, y, c, rot, k) { // たたんだ傘（持ち手が上）
+    const s = SC() * k;
+    ctx.save(); ctx.translate(x, y); ctx.rotate(rot); ctx.lineWidth = 3; ctx.strokeStyle = INK;
+    ctx.beginPath(); ctx.arc(-8 * s, -60 * s, 8 * s, Math.PI, 0); ctx.stroke(); // 持ち手
+    ctx.beginPath(); ctx.moveTo(0, -60 * s); ctx.lineTo(0, -44 * s); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, -46 * s); ctx.quadraticCurveTo(12 * s, -20 * s, 3 * s, 60 * s); ctx.lineTo(-3 * s, 60 * s); ctx.quadraticCurveTo(-12 * s, -20 * s, 0, -46 * s);
+    ctx.fillStyle = c === 'vinyl' ? 'rgba(225,238,255,.8)' : c; ctx.fill(); ctx.stroke();
+    ctx.restore();
+  },
+  draw() {
+    const g = this.geo(), s = g.s;
+    ctx.fillStyle = this.bg; ctx.fillRect(0, 0, W, g.wall);
+    ctx.fillStyle = '#d9b98f'; ctx.fillRect(0, g.wall, W, H - g.wall); ctx.fillStyle = INK; ctx.fillRect(0, g.wall - 2, W, 3); // 床
+    ctx.strokeStyle = 'rgba(120,80,40,.25)'; ctx.lineWidth = 2; for (let y = g.wall + 30 * s; y < H; y += 34 * s) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+    // 窓（外は晴れ）
+    ctx.lineWidth = 3; ctx.strokeStyle = INK; rr(W * 0.1, H * 0.08, W * 0.36, H * 0.24, 6 * s); ctx.fillStyle = '#bfe6ff'; ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(W * 0.28, H * 0.08); ctx.lineTo(W * 0.28, H * 0.32); ctx.stroke();
+    ctx.beginPath(); ctx.arc(W * 0.2, H * 0.15, 14 * s, 0, Math.PI * 2); ctx.fillStyle = POP; ctx.fill(); ctx.stroke();
+    // 壁の天気予報のメモ
+    rr(W * 0.58, H * 0.12, W * 0.3, H * 0.1, 4 * s); ctx.fillStyle = PAPER; ctx.fill(); ctx.stroke();
+    ctx.fillStyle = INK; ctx.font = `${Math.round(14 * s)}px ${DISPLAY}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('きょうは', W * 0.73, H * 0.148); ctx.fillText('一日 晴れ', W * 0.73, H * 0.19); ctx.textAlign = 'left';
+    // 開いた傘は、奥から順に描く
+    for (const o of this.opened.slice().sort((a, b) => a.y - b.y)) { const k = this.kOf(o.y); this.canopy(o.x, o.y, o.c, o.rot + Math.sin(clock * 40) * o.jig * 0.25, k, 1); }
+    // 傘立て（たたんだ傘がささっている）
+    for (let i = 0; i < 4; i++) this.closed(g.kx + (i - 1.5) * 16 * s, g.ky - 80 * s - (i % 2) * 8 * s, UMB_C[(this.ci + i) % UMB_C.length], (i - 1.5) * 0.12, 1);
+    ctx.lineWidth = 3; ctx.strokeStyle = INK; rr(g.kx - 46 * s, g.ky - 70 * s, 92 * s, 80 * s, 8 * s); ctx.fillStyle = '#8a8f99'; ctx.fill(); ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,.25)'; ctx.fillRect(g.kx - 36 * s, g.ky - 62 * s, 10 * s, 60 * s);
+    for (const f of this.fly) { const [x, y] = this.fpos(f), o = clamp((f.u - 0.25) / 0.25, 0, 1), k = 0.8 + 0.3 * this.kOf(f.ty) * f.u; if (o <= 0) this.closed(x, y, f.c, f.rot + f.u * f.spin, k); else this.canopy(x, y, f.c, f.rot * f.u, k, o); }
+    for (const p of this.pops) bigText('バサッ', p.x, p.y - 70 * s - (0.45 - p.t) * 50 * s, Math.round(26 * s), HOT, PAPER);
+    if (this.sayT > 0) bigText(this.say, W / 2, H * 0.36, Math.round(32 * s), HOT, PAPER, W * 0.9);
+  },
+  drawHint(t) { const g = this.geo(), p = (t * 1.4) % 1; finger(g.kx + 40 * g.s, g.ky - 40 * g.s - p * 120 * g.s, 0.9); }
+};
+
+/* ---------- 大盛り27: キーボード ---------- */
+const KEY_PULL = 36;   // キーを押したまま、この長さ px（SC()）動かすと、ポンッと外れる
+const KEY_GRAB = 40;   // キーのふちからこの距離 px（SC()）までなら、つまめる
+const KEY_SEC = 20;    // キーをはめ直す（1個）
+const KEY_BUY = 8, KEY_YEN = 1000; // 1回でこの数以上外したら、つめが折れてはまらないキーが出るので、キーボードの買い直し
+const KEY_JIS = [ // JISの配列。1段ずつ [字, かな, 幅（キー何個ぶん）]。幅を書かないキーは1。Enter は2段ぶん
+  [['半/全', '', 1], ['1', 'ぬ'], ['2', 'ふ'], ['3', 'あ'], ['4', 'う'], ['5', 'え'], ['6', 'お'], ['7', 'や'], ['8', 'ゆ'], ['9', 'よ'], ['0', 'わ'], ['-', 'ほ'], ['^', 'へ'], ['¥', 'ー'], ['BS', '', 1]],
+  [['Tab', '', 1.5], ['Q', 'た'], ['W', 'て'], ['E', 'い'], ['R', 'す'], ['T', 'か'], ['Y', 'ん'], ['U', 'な'], ['I', 'に'], ['O', 'ら'], ['P', 'せ'], ['@', '゛'], ['[', '゜'], ['Enter', '', 1.5]],
+  [['英数', '', 1.75], ['A', 'ち'], ['S', 'と'], ['D', 'し'], ['F', 'は'], ['G', 'き'], ['H', 'く'], ['J', 'ま'], ['K', 'の'], ['L', 'り'], [';', 'れ'], [':', 'け'], [']', 'む']],
+  [['Shift', '', 2.25], ['Z', 'つ'], ['X', 'さ'], ['C', 'そ'], ['V', 'ひ'], ['B', 'こ'], ['N', 'み'], ['M', 'も'], [',', 'ね'], ['.', 'る'], ['/', 'め'], ['\\', 'ろ'], ['Shift', '', 1.75]],
+  [['Ctrl', '', 1.5], ['Fn', '', 1.25], ['Alt', '', 1.25], ['無変換', '', 1.25], ['', '', 4.5], ['変換', '', 1.25], ['かな', '', 1.25], ['Alt', '', 1.25], ['Ctrl', '', 1.5]]
+];
+const keyboard = {
+  key: 'keyboard', name: 'キーボード', prompt: '外せ！', hint: 'キーを つまんで 引っぱる', bg: '#dde6ee',
+  bgm: song(136, [
+    ['square', 0.04, '76 . 76 . 79 . 76 . 72 . 74 . 76 . . . 77 . 77 . 81 . 77 . 74 . 76 . 72 . . .'],
+    ['triangle', 0.13, '45 . . . 52 . . . 48 . . . 55 . . . 50 . . . 57 . . . 52 . . . 40 . . .']
+  ], ['k.hhs.h.k.hhs.hr']),
+  shop: [['キーボード', 'キーボード JIS'], ['キーボードのカバー', 'キーボードカバー']],
+  bill(t) { const n = t.keyboard || 0, b = t.keyboardBuy || 0; return { v: n + '個', n: (b ? 'キーボードの買い直し・' : '') + 'キーをはめ直す', sec: n * KEY_SEC, yen: b * KEY_YEN }; },
+  init() { this.n = 0; this.ptr = {}; this.keys = this.newBoard(); this.fly = []; this.floor = []; this.wait = 0; this.say = ''; this.sayT = 0; },
+  newBoard() { // キーごとに、左からの位置 x と幅 w（キー何個ぶん）、段 r、高さ h（段の数）
+    const ks = [];
+    KEY_JIS.forEach((row, r) => { let x = 0; for (const [ch, kana, w = 1] of row) { ks.push({ ch, kana, r, x, w, h: ch === 'Enter' ? 2 : 1, gone: false, held: false }); x += w; } });
+    return ks;
+  },
+  started() { return this.n > 0; },
+  result() { return this.n + '個'; },
+  commit(tot) { add(tot, 'keyboard', this.n); add(tot, 'keyboardBuy', this.n >= KEY_BUY ? 1 : 0); mx(tot, 'keyboardMax', this.n); },
+  geo() { const s = SC(), u = Math.min(W * 0.95 / 15.5, 40 * s), kw = u * 15.5; return { s, u, x: (W - kw) / 2, y: H * 0.52, kw, kh: u * 5.5, desk: H * 0.44 }; },
+  kpos(k, g) { return [g.x + g.u * (0.25 + k.x + k.w / 2), g.y + g.u * (0.25 + k.r + k.h / 2)]; },
+  down(id, x, y) { // いちばん近いキーをつまむ（キーの上なら、そのキー）
+    if (this.wait > 0) return;
+    const g = this.geo(); let best = null, bd = KEY_GRAB * g.s;
+    for (const k of this.keys) {
+      if (k.gone || k.held) continue;
+      const [kx, ky] = this.kpos(k, g), d = Math.hypot(Math.max(0, Math.abs(x - kx) - k.w * g.u / 2), Math.max(0, Math.abs(y - ky) - k.h * g.u / 2)) + Math.hypot(x - kx, y - ky) * 0.01;
+      if (d < bd) { bd = d; best = k; }
+    }
+    if (best) { best.held = true; this.ptr[id] = { k: best, x, y, x0: x, y0: y }; }
+  },
+  move(id, x, y) {
+    const p = this.ptr[id]; if (!p) return;
+    p.x = x; p.y = y;
+    const d = Math.hypot(x - p.x0, y - p.y0);
+    if (d > KEY_PULL * SC()) { // ポンッ。引っぱった向きへ飛ぶ
+      const g = this.geo(), s = g.s, [kx, ky] = this.kpos(p.k, g), ux = (x - p.x0) / d, uy = (y - p.y0) / d;
+      p.k.gone = true; p.k.held = false; delete this.ptr[id];
+      this.fly.push({ x: kx, y: ky, vx: ux * rnd(250, 450) * s, vy: (uy * 300 - rnd(350, 600)) * s, r: 0, vr: rnd(-12, 12), k: p.k, land: rnd(g.y + g.kh + 20 * s, H - 20 * s) });
+      sfx.clack(); sfx.pon();
+      if (scoring()) { this.n++; if (this.n === KEY_BUY) { this.say = 'つめが折れた…！'; this.sayT = 1; } else if (this.sayT <= 0) { this.say = 'ポンッ！'; this.sayT = 0.3; } }
+      if (this.keys.every(k => k.gone)) this.wait = 0.4;
+    }
+  },
+  up(id) {
+    if (id == null) { Object.values(this.ptr).forEach(p => { p.k.held = false; }); this.ptr = {}; return; }
+    const p = this.ptr[id]; if (p) { p.k.held = false; delete this.ptr[id]; }
+  },
+  update(dt) {
+    const s = SC();
+    this.sayT = Math.max(0, this.sayT - dt);
+    if (this.wait > 0) { this.wait -= dt; if (this.wait <= 0) this.keys = this.newBoard(); } // 全部外したら、次のキーボード
+    for (let i = this.fly.length - 1; i >= 0; i--) {
+      const f = this.fly[i]; f.vy += 1800 * s * dt; f.x += f.vx * dt; f.y += f.vy * dt; f.r += f.vr * dt;
+      if (f.vy > 0 && f.y >= f.land) { f.y = f.land; f.x = clamp(f.x, 20 * s, W - 20 * s); this.floor.push(f); this.fly.splice(i, 1); sfx.tick(); }
+    }
+    if (this.floor.length > 80) this.floor.shift();
+  },
+  shape(k, u, inset) { // キーの形（真ん中が原点）。Enter はL字
+    const w = k.w * u - inset, h = k.h * u - inset, r = Math.min(4, u * 0.15);
+    if (k.ch !== 'Enter') { rr(-w / 2, -h / 2, w, h, r); return; }
+    const nx = -w / 2 + 0.25 * u; // 下の段は、左を少し細く
+    ctx.beginPath(); ctx.moveTo(-w / 2, -h / 2); ctx.lineTo(w / 2, -h / 2); ctx.lineTo(w / 2, h / 2); ctx.lineTo(nx, h / 2); ctx.lineTo(nx, 0); ctx.lineTo(-w / 2, 0); ctx.closePath();
+  },
+  cap(x, y, k, r, sc) { // キー1個（左上に字、右下にかな）
+    const u = this.geo().u * sc, s = SC(), g = Math.max(2, u * 0.1);
+    ctx.save(); ctx.translate(x, y); ctx.rotate(r || 0); ctx.lineWidth = 1.5; ctx.strokeStyle = INK;
+    ctx.save(); ctx.translate(0, u * 0.08); this.shape(k, u, g); ctx.fillStyle = '#b9c0c9'; ctx.fill(); ctx.stroke(); ctx.restore();
+    this.shape(k, u, g); ctx.fillStyle = '#f4f6f8'; ctx.fill(); ctx.stroke();
+    const w = k.w * u - g, h = k.h * u - g, big = k.ch.length === 1;
+    ctx.fillStyle = INK; ctx.textBaseline = 'middle';
+    if (big) {
+      ctx.font = `${Math.round(u * 0.4)}px ${DISPLAY}`; ctx.textAlign = 'left'; ctx.fillText(k.ch, -w / 2 + u * 0.1, -h / 2 + u * 0.27);
+      if (k.kana) { ctx.font = `${Math.round(u * 0.32)}px ${BODY}`; ctx.textAlign = 'right'; ctx.fillStyle = '#c0392b'; ctx.fillText(k.kana, w / 2 - u * 0.08, h / 2 - u * 0.25); }
+    } else if (k.ch) { ctx.font = `${Math.round(u * 0.27)}px ${DISPLAY}`; ctx.textAlign = 'center'; ctx.fillText(k.ch, k.ch === 'Enter' ? u * 0.12 : 0, k.ch === 'Enter' ? -h / 4 : 0, w - u * 0.15); }
+    ctx.textAlign = 'left'; ctx.restore();
+  },
+  draw() {
+    const g = this.geo(), s = g.s;
+    ctx.fillStyle = this.bg; ctx.fillRect(0, 0, W, g.desk);
+    ctx.fillStyle = '#c99a6b'; ctx.fillRect(0, g.desk, W, H - g.desk); ctx.fillStyle = INK; ctx.fillRect(0, g.desk - 2, W, 3); // 机
+    // モニター（パパの会議の資料）
+    ctx.lineWidth = 3; ctx.strokeStyle = INK;
+    ctx.fillStyle = '#3a4150'; ctx.fillRect(W / 2 - 14 * s, H * 0.36, 28 * s, g.desk - H * 0.36 + 6 * s);
+    rr(W * 0.14, H * 0.06, W * 0.72, H * 0.3, 8 * s); ctx.fillStyle = '#3a4150'; ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#f7fbff'; ctx.fillRect(W * 0.17, H * 0.08, W * 0.66, H * 0.26);
+    ctx.fillStyle = INK; ctx.font = `${Math.round(14 * s)}px ${DISPLAY}`; ctx.textBaseline = 'middle'; ctx.textAlign = 'right'; ctx.fillText('会議の資料（作成中）', W * 0.8, H * 0.11, W * 0.44); ctx.textAlign = 'left';
+    ctx.fillStyle = '#c4ccd6'; for (let i = 0; i < 5; i++) ctx.fillRect(W * 0.2, H * (0.15 + i * 0.035), W * (0.56 - (i % 3) * 0.1), 6 * s);
+    if (Math.floor(clock * 2) % 2) { ctx.fillStyle = INK; ctx.fillRect(W * 0.2 + W * 0.36, H * 0.29 - 8 * s, 3 * s, 16 * s); } // カーソル
+    // キーボードの本体と、外したあとの穴
+    ctx.lineWidth = 3; rr(g.x, g.y, g.kw, g.kh, 10 * s); ctx.fillStyle = '#5b6372'; ctx.fill(); ctx.stroke();
+    for (const k of this.keys) {
+      const [kx, ky] = this.kpos(k, g);
+      if (k.gone) {
+        ctx.save(); ctx.translate(kx, ky); this.shape(k, g.u, Math.max(2, g.u * 0.1)); ctx.fillStyle = '#2b3039'; ctx.fill(); ctx.restore();
+        const m = Math.max(3, g.u * 0.18); ctx.fillStyle = '#9aa3ae'; ctx.fillRect(kx - m, ky - m * 0.3, m * 2, m * 0.6); ctx.fillRect(kx - m * 0.3, ky - m, m * 0.6, m * 2);
+      } else if (!k.held) this.cap(kx, ky, k, 0, 1);
+    }
+    for (const p of Object.values(this.ptr)) { const [kx, ky] = this.kpos(p.k, g), d = Math.hypot(p.x - p.x0, p.y - p.y0) || 1, m = Math.min(d, 10 * s); this.cap(kx + (p.x - p.x0) / d * m, ky + (p.y - p.y0) / d * m - 4 * s, p.k, (p.x - p.x0) / d * 0.15, 1.15); } // つまんで浮いているキー
+    for (const f of this.floor) this.cap(f.x, f.y, f.k, f.r, 1);
+    for (const f of this.fly) this.cap(f.x, f.y, f.k, f.r, 1.1);
+    if (this.sayT > 0) bigText(this.say, W / 2, H * 0.46, Math.round(30 * s), HOT, PAPER, W * 0.9);
+  },
+  drawHint(t) { const g = this.geo(), p = (t * 1.2) % 1, k = this.keys.find(k => !k.gone && k.ch === 'G') || this.keys.find(k => !k.gone) || this.keys[0], [kx, ky] = this.kpos(k, g); finger(kx + p * 30 * g.s, ky - p * 40 * g.s, 0.9); }
+};
+
+/* ---------- 大盛り28: テーブルの物を落とす ---------- */
+const TBL_GRAB = 50;   // 物のふちからこの距離 px（SC()）までなら、押せる（ユーザーの指摘で30pxから広げた）
+const TBL_ON = 4;      // テーブルにいつも置いてある物の数（落とすと、だれかが次の物を置く）
+const TBL_SEC = 15;    // 拾って、テーブルにもどす（1個）
+const TBL_LOST = 6, TBL_YEN = 1000; // 1回でこの数以上落としたら、リモコンの電池のフタが行方不明になるので、リモコンの買い直し
+const TBL_ITEMS = [ // 名前・幅・高さ（px）・色
+  ['リモコン', 76, 16, '#3a4150'], ['消しゴム', 36, 18, '#ffffff'], ['ペン', 66, 9, '#2f8fd6'], ['コースター', 52, 7, '#c98a5a'],
+  ['メガネケース', 64, 22, '#b35a7a'], ['鍵', 38, 12, '#e0b33a'], ['小銭入れ', 46, 26, '#5fb35a'], ['ハンドクリーム', 50, 16, '#ff9ecf']
+];
+const tabletop = {
+  key: 'tabletop', name: 'テーブルの物', prompt: '落とせ！', hint: '指で押して ふちから落とす', bg: '#f3e9d8',
+  bgm: song(112, [
+    ['pluck', 0.08, '67 . . 71 . . 74 . 72 . . 69 . . 67 . 65 . . 69 . . 72 . 71 . . 67 . . . .'],
+    ['triangle', 0.13, '43 . . . 50 . . . 45 . . . 52 . . . 41 . . . 48 . . . 43 . . . 38 . . .']
+  ], ['k..h..s.k.kh..s.']),
+  shop: [['リモコン', 'テレビ リモコン'], ['テーブルの落下防止', 'テーブル 落下防止 ガード']],
+  bill(t) { const n = t.tabletop || 0, b = t.tabletopBuy || 0; return { v: n + '個', n: (b ? 'リモコンの買い直し・' : '') + '拾ってテーブルにもどす', sec: n * TBL_SEC, yen: b * TBL_YEN }; },
+  init() { this.n = 0; this.ptr = {}; this.ii = Math.floor(Math.random() * TBL_ITEMS.length); this.on = []; this.fall = []; this.floor = []; this.pops = []; this.wait = 0; this.say = ''; this.sayT = 0; for (let i = 0; i < TBL_ON; i++) this.place(true); },
+  started() { return this.n > 0; },
+  result() { return this.n + '個'; },
+  commit(tot) { add(tot, 'tabletop', this.n); add(tot, 'tabletopBuy', this.n >= TBL_LOST ? 1 : 0); mx(tot, 'tabletopMax', this.n); },
+  geo() { const s = SC(); return { s, ty: H * 0.5, lx: W * 0.08, rx: W * 0.92, fy: H * 0.84 }; },
+  place(now) { // 空いている所に1個置く
+    const g = this.geo(), s = g.s, [name, w0, h0, c] = TBL_ITEMS[this.ii++ % TBL_ITEMS.length], w = w0 * s * 1.15, h = h0 * s * 1.15;
+    const step = (g.rx - g.lx) / TBL_ON, free = []; // テーブルを TBL_ON 区画に分けて、空いている区画の真ん中に置く
+    for (let i = 0; i < TBL_ON; i++) { const x = clamp(g.lx + step * (i + 0.5), g.lx + w / 2, g.rx - w / 2); if (this.on.every(o => Math.abs(o.x - x) > (o.w + w) / 2 + 4 * s)) free.push(x); }
+    if (!free.length) { this.ii--; return; }
+    this.on.push({ name, w, h, c, x: free[Math.floor(Math.random() * free.length)], drop: now ? 0 : 1 });
+  },
+  down(id, x, y) {
+    const g = this.geo(), r = TBL_GRAB * g.s; let best = null, bd = 1e9;
+    for (const o of this.on) { if (o.held || o.drop > 0.2) continue; const d = Math.abs(x - o.x) - o.w / 2; if (d < r && Math.abs(y - (g.ty - o.h / 2)) < o.h / 2 + r * 1.6 && d < bd) { bd = d; best = o; } }
+    if (best) { best.held = true; this.ptr[id] = { o: best, lx: x, vx: 0 }; }
+  },
+  move(id, x) {
+    const p = this.ptr[id]; if (!p) return;
+    const g = this.geo(), dx = x - p.lx; p.lx = x; p.o.x += dx; // 指といっしょに横へすべる
+    this.shove(p.o, Math.sign(dx));
+    for (const o of this.on.slice()) if (o.x < g.lx || o.x > g.rx) this.drop(o); // 押されたとなりの物も、ふちを越えたら落ちる
+  },
+  shove(a, dir) { // ぶつかったとなりの物も、いっしょに押す
+    if (!dir) return;
+    for (const o of this.on) { if (o === a || o.drop > 0.2) continue; const gap = (a.w + o.w) / 2; if ((o.x - a.x) * dir >= 0 && Math.abs(o.x - a.x) < gap) { o.x = a.x + dir * gap; this.shove(o, dir); } }
+  },
+  drop(o) { // ふちから落ちる
+    const g = this.geo(), s = g.s, i = this.on.indexOf(o);
+    if (i >= 0) this.on.splice(i, 1);
+    for (const k in this.ptr) if (this.ptr[k].o === o) delete this.ptr[k];
+    const dir = o.x < W / 2 ? -1 : 1;
+    this.fall.push({ ...o, y: g.ty - o.h / 2, vx: dir * rnd(60, 140) * s, vy: 0, r: 0, vr: dir * rnd(4, 9), land: rnd(g.fy - 6 * s, H - 20 * s), b: 0 });
+    if (scoring()) { this.n++; if (this.n === TBL_LOST) { this.say = '電池のフタが ない…！'; this.sayT = 1; } }
+    this.wait = 0.3;
+  },
+  up(id) {
+    if (id == null) { Object.values(this.ptr).forEach(p => { p.o.held = false; }); this.ptr = {}; return; }
+    const p = this.ptr[id]; if (p) { p.o.held = false; delete this.ptr[id]; }
+  },
+  update(dt) {
+    const s = SC();
+    this.sayT = Math.max(0, this.sayT - dt);
+    for (const o of this.on) o.drop = Math.max(0, o.drop - dt / 0.3);
+    if (this.on.length < TBL_ON) { this.wait -= dt; if (this.wait <= 0) { this.place(false); this.wait = 0.25; } }
+    for (let i = this.fall.length - 1; i >= 0; i--) {
+      const f = this.fall[i]; f.vy += 2000 * s * dt; f.x += f.vx * dt; f.y += f.vy * dt; f.r += f.vr * dt;
+      if (f.vy > 0 && f.y >= f.land) { // コトッ。1回はねて止まる
+        f.y = f.land; sfx.thud();
+        if (f.b === 0) { f.b = 1; f.vy = -f.vy * 0.3; f.vx *= 0.5; f.vr *= 0.4; this.pops.push({ x: f.x, y: f.y, t: 0.4 }); }
+        else { f.x = clamp(f.x, 20 * s, W - 20 * s); f.r = Math.round(f.r / Math.PI) * Math.PI + rnd(-0.3, 0.3); this.floor.push(f); this.fall.splice(i, 1); }
+      }
+    }
+    if (this.floor.length > 40) this.floor.shift();
+    for (let i = this.pops.length - 1; i >= 0; i--) { this.pops[i].t -= dt; if (this.pops[i].t <= 0) this.pops.splice(i, 1); }
+  },
+  item(o, x, y, r) { // 物1個（(x, y) は真ん中）
+    const s = SC(), w = o.w, h = o.h;
+    ctx.save(); ctx.translate(x, y); ctx.rotate(r || 0); ctx.lineWidth = 2.5; ctx.strokeStyle = INK;
+    switch (o.name) {
+      case 'リモコン': rr(-w / 2, -h / 2, w, h, 5 * s); ctx.fillStyle = o.c; ctx.fill(); ctx.stroke(); ctx.fillStyle = HOT; ctx.beginPath(); ctx.arc(w * 0.36, -h * 0.05, 3.5 * s, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#c4ccd6'; for (let i = 0; i < 4; i++) ctx.fillRect(-w * 0.4 + i * 10 * s, -2 * s, 6 * s, 4 * s); break;
+      case '消しゴム': rr(-w / 2, -h / 2, w, h, 3 * s); ctx.fillStyle = o.c; ctx.fill(); ctx.stroke(); ctx.fillStyle = '#2f8fd6'; ctx.fillRect(-w * 0.15, -h / 2, w * 0.65, h); ctx.strokeRect(-w * 0.15, -h / 2, w * 0.65, h); break;
+      case 'ペン': rr(-w / 2, -h / 2, w, h, h / 2); ctx.fillStyle = PAPER; ctx.fill(); ctx.stroke(); rr(w * 0.1, -h / 2, w * 0.4, h, h / 2); ctx.fillStyle = o.c; ctx.fill(); ctx.stroke(); break;
+      case '鍵': ctx.beginPath(); ctx.arc(-w * 0.28, 0, h * 0.75, 0, Math.PI * 2); ctx.fillStyle = o.c; ctx.fill(); ctx.stroke(); ctx.beginPath(); ctx.arc(-w * 0.28, 0, h * 0.28, 0, Math.PI * 2); ctx.fillStyle = PAPER; ctx.fill(); ctx.stroke(); ctx.fillStyle = o.c; ctx.fillRect(-w * 0.05, -h * 0.25, w * 0.55, h * 0.5); ctx.strokeRect(-w * 0.05, -h * 0.25, w * 0.55, h * 0.5); break;
+      case '小銭入れ': rr(-w / 2, -h / 2, w, h, 8 * s); ctx.fillStyle = o.c; ctx.fill(); ctx.stroke(); ctx.beginPath(); ctx.arc(-5 * s, -h / 2 - 2 * s, 4 * s, 0, Math.PI * 2); ctx.arc(5 * s, -h / 2 - 2 * s, 4 * s, 0, Math.PI * 2); ctx.fillStyle = POP; ctx.fill(); ctx.stroke(); break;
+      case 'ハンドクリーム': ctx.beginPath(); ctx.moveTo(-w / 2, -h / 2); ctx.lineTo(w * 0.3, -h * 0.3); ctx.lineTo(w * 0.3, h * 0.3); ctx.lineTo(-w / 2, h / 2); ctx.closePath(); ctx.fillStyle = o.c; ctx.fill(); ctx.stroke(); rr(w * 0.3, -h * 0.35, w * 0.2, h * 0.7, 2 * s); ctx.fillStyle = PAPER; ctx.fill(); ctx.stroke(); break;
+      default: rr(-w / 2, -h / 2, w, h, Math.min(h / 2, 8 * s)); ctx.fillStyle = o.c; ctx.fill(); ctx.stroke(); // コースター・メガネケース
+    }
+    ctx.restore();
+  },
+  draw() {
+    const g = this.geo(), s = g.s;
+    ctx.fillStyle = this.bg; ctx.fillRect(0, 0, W, H * 0.7);
+    ctx.fillStyle = '#b98a5e'; ctx.fillRect(0, H * 0.7, W, H * 0.3); ctx.fillStyle = INK; ctx.fillRect(0, H * 0.7 - 2, W, 3); // 床
+    // 壁の絵
+    ctx.lineWidth = 3; ctx.strokeStyle = INK; rr(W * 0.3, H * 0.1, W * 0.4, H * 0.2, 4 * s); ctx.fillStyle = '#9fd6c4'; ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(W * 0.32, H * 0.28); ctx.lineTo(W * 0.45, H * 0.16); ctx.lineTo(W * 0.55, H * 0.24); ctx.lineTo(W * 0.62, H * 0.19); ctx.lineTo(W * 0.68, H * 0.28); ctx.closePath(); ctx.fillStyle = '#5f9e8f'; ctx.fill(); ctx.stroke();
+    // テーブル（横から）
+    ctx.fillStyle = '#8a5a36'; ctx.fillRect(g.lx + 14 * s, g.ty + 14 * s, 14 * s, H * 0.86 - g.ty - 14 * s); ctx.fillRect(g.rx - 28 * s, g.ty + 14 * s, 14 * s, H * 0.86 - g.ty - 14 * s);
+    ctx.strokeRect(g.lx + 14 * s, g.ty + 14 * s, 14 * s, H * 0.86 - g.ty - 14 * s); ctx.strokeRect(g.rx - 28 * s, g.ty + 14 * s, 14 * s, H * 0.86 - g.ty - 14 * s);
+    rr(g.lx, g.ty, g.rx - g.lx, 16 * s, 4 * s); ctx.fillStyle = '#a8703f'; ctx.fill(); ctx.stroke();
+    for (const f of this.floor) this.item(f, f.x, f.y - f.h / 2, f.r);
+    for (const o of this.on) this.item(o, o.x, g.ty - o.h / 2 - o.drop * o.drop * 160 * s, 0);
+    for (const f of this.fall) this.item(f, f.x, f.y, f.r);
+    for (const p of this.pops) bigText('コトッ', p.x, p.y - 30 * s - (0.4 - p.t) * 40 * s, Math.round(22 * s), HOT, PAPER);
+    if (this.sayT > 0) bigText(this.say, W / 2, H * 0.4, Math.round(30 * s), HOT, PAPER, W * 0.9);
+  },
+  drawHint(t) { const g = this.geo(), o = this.on.reduce((a, b) => (Math.abs(b.x - W / 2) > Math.abs(a.x - W / 2) ? b : a), this.on[0]), dir = o && o.x < W / 2 ? -1 : 1, p = (t * 1.1) % 1; finger((o ? o.x : W / 2) - dir * (o ? o.w / 2 : 0) + dir * p * 70 * g.s, g.ty - 6 * g.s, 0.9); }
+};
+
+/* ---------- 大盛り29: トランプ ---------- */
+const CARD_BEND = 100; // 山を押して、この長さ px（SC()）下へ引くと、いちばん反る。離すと、反ったぶんだけ飛び散る
+const CARD_MIN = 16;   // これより短く引いて離したときは、飛ばない
+const CARD_MAX = 26;   // いちばん反らせて離したときに飛ぶ枚数
+const CARD_SEC = 3;    // 拾って、そろえる（1枚）
+const CARD_DECK = 52;  // 1組の枚数
+const CARD_LOST = CARD_DECK, CARD_YEN = 1000; // 1回でこの数以上（1組ぶん）ばらまいたら、1枚だけ見つからないので、トランプの買い直し
+const CARD_SUIT = [['♠', INK], ['♥', '#e0303a'], ['♦', '#e0303a'], ['♣', INK]], CARD_RANK = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+const cards = {
+  key: 'cards', name: 'トランプ', prompt: 'ばらまけ！', hint: '山を 下に引いて はなす', bg: '#2f7a55',
+  bgm: song(160, [
+    ['square', 0.045, '79 . 77 . 76 . 74 . 72 . . . 79 . . . 81 . 79 . 77 . 76 . 74 . . . 67 . . .'],
+    ['triangle', 0.13, '48 . 55 . 52 . 55 . 48 . 55 . 52 . 55 . 50 . 57 . 53 . 57 . 43 . 50 . 47 . 50 .']
+  ], ['k.h.s.h.k.hks.hh']),
+  shop: [['トランプ', 'トランプ'], ['トランプケース', 'トランプ ケース']],
+  bill(t) { const n = t.cards || 0, b = t.cardsBuy || 0; return { v: n + '枚', n: (b ? '1枚 見つからないトランプの買い直し・' : '') + '拾ってそろえる', sec: n * CARD_SEC, yen: b * CARD_YEN }; },
+  init() { this.n = 0; this.ptr = null; this.bend = 0; this.left = CARD_DECK; this.back = 0; this.slide = 0; this.fly = []; this.floor = []; this.say = ''; this.sayT = 0; },
+  started() { return this.n > 0; },
+  result() { return this.n + '枚'; },
+  commit(tot) { add(tot, 'cards', this.n); add(tot, 'cardsBuy', this.n >= CARD_LOST ? 1 : 0); mx(tot, 'cardsMax', this.n); },
+  geo() { const s = SC(); return { s, cx: W / 2, cy: H * 0.74, w: 80 * s, h: 114 * s }; },
+  down(id, x, y) { if (this.ptr == null && this.slide <= 0) { this.ptr = id; this.y0 = y; this.bend = 0; } }, // どこを押してもよい
+  move(id, x, y) { if (id === this.ptr) this.bend = clamp(y - this.y0, 0, CARD_BEND * SC()); },
+  up(id) {
+    if (id == null) { this.ptr = null; this.bend = 0; return; }
+    if (id !== this.ptr) return;
+    this.ptr = null; const s = SC(), b = this.bend; this.bend = 0;
+    if (b < CARD_MIN * s) return;
+    const k = b / (CARD_BEND * s), m = Math.min(this.left, Math.max(2, Math.round(k * CARD_MAX))), g = this.geo();
+    for (let i = 0; i < m; i++) this.fly.push({ x: g.cx + rnd(-10, 10) * s, y: g.cy - g.h * 0.3, vx: rnd(-1, 1) * (250 + 450 * k) * s, vy: -rnd(500, 1000 + 600 * k) * s, r: rnd(0, 6), vr: rnd(-10, 10), face: Math.random() < 0.5, su: Math.floor(Math.random() * 4), rk: Math.floor(Math.random() * 13), back: this.back, land: rnd(H * 0.4, H - 30 * s) });
+    this.left -= m; sfx.spray();
+    if (scoring()) { this.n += m; if (this.n >= CARD_LOST && this.n - m < CARD_LOST) { this.say = '1枚 見つからない…！'; this.sayT = 1.1; } else if (this.sayT <= 0) { this.say = k > 0.8 ? 'バサーッ！' : 'パラパラッ'; this.sayT = 0.4; } }
+    if (this.left <= 0) { this.slide = 1; this.left = CARD_DECK; this.back = 1 - this.back; } // 1組使いきったら、次の1組
+  },
+  update(dt) {
+    const s = SC();
+    this.sayT = Math.max(0, this.sayT - dt);
+    if (this.slide > 0) this.slide = Math.max(0, this.slide - dt / 0.3);
+    for (let i = this.fly.length - 1; i >= 0; i--) { // ひらひら落ちて、床に残る
+      const f = this.fly[i]; f.vy = Math.min(f.vy + 1500 * s * dt, 240 * s); f.vx *= Math.exp(-dt * 1.8); f.x += f.vx * dt + Math.sin(clock * 5 + f.r) * 40 * s * dt; f.y += f.vy * dt; f.r += f.vr * dt; f.vr *= Math.exp(-dt);
+      if (f.vy > 0 && f.y >= f.land) { this.floor.push(f); this.fly.splice(i, 1); }
+    }
+    if (this.floor.length > 260) this.floor.splice(0, this.floor.length - 260);
+  },
+  card(x, y, f, k) { // カード1枚（表か裏）
+    const s = SC() * k, w = 40 * s, h = 57 * s;
+    ctx.save(); ctx.translate(x, y); ctx.rotate(f.r); ctx.lineWidth = 2; ctx.strokeStyle = INK;
+    rr(-w / 2, -h / 2, w, h, 4 * s); ctx.fillStyle = f.face ? PAPER : (f.back ? '#3d6fd6' : '#d6403d'); ctx.fill(); ctx.stroke();
+    if (f.face) { const [m, c] = CARD_SUIT[f.su]; ctx.fillStyle = c; ctx.font = `${Math.round(20 * s)}px ${DISPLAY}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(m, 0, 4 * s); ctx.font = `${Math.round(11 * s)}px ${DISPLAY}`; ctx.fillText(CARD_RANK[f.rk], -w * 0.28, -h * 0.34); ctx.textAlign = 'left'; }
+    else { ctx.strokeStyle = 'rgba(255,255,255,.6)'; ctx.strokeRect(-w / 2 + 4 * s, -h / 2 + 4 * s, w - 8 * s, h - 8 * s); }
+    ctx.restore();
+  },
+  draw() {
+    const g = this.geo(), s = g.s;
+    ctx.fillStyle = '#f0e2c8'; ctx.fillRect(0, 0, W, H * 0.34); // 壁
+    ctx.fillStyle = '#b98a5e'; ctx.fillRect(0, H * 0.34, W, H * 0.66); ctx.fillStyle = INK; ctx.fillRect(0, H * 0.34 - 2, W, 3); // 床
+    ctx.lineWidth = 3; ctx.strokeStyle = INK; ctx.beginPath(); ctx.ellipse(W / 2, H * 0.62, W * 0.46, H * 0.2, 0, 0, Math.PI * 2); ctx.fillStyle = '#e6c27a'; ctx.fill(); ctx.stroke(); // じゅうたん
+    // 壁の「みんなで ババ抜き」の予定
+    rr(W * 0.26, H * 0.08, W * 0.48, H * 0.12, 4 * s); ctx.fillStyle = PAPER; ctx.fill(); ctx.stroke();
+    ctx.fillStyle = INK; ctx.font = `${Math.round(15 * s)}px ${DISPLAY}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('こんや 8時', W / 2, H * 0.115); ctx.fillText('家族で ババ抜き', W / 2, H * 0.165, W * 0.44); ctx.textAlign = 'left';
+    for (const f of this.floor) this.card(f.x, f.y, f, 1);
+    // 山（下へ引くと、反る）
+    const b = this.bend / (CARD_BEND * s), cx = g.cx + this.slide * W, n = Math.ceil(this.left / 6);
+    ctx.save(); ctx.translate(cx, g.cy);
+    for (let i = 0; i < n; i++) {
+      const y = -i * 2 * s;
+      ctx.beginPath(); ctx.moveTo(-g.w / 2, y - g.h / 2); ctx.quadraticCurveTo(0, y - g.h / 2 + b * 34 * s, g.w / 2, y - g.h / 2); ctx.lineTo(g.w / 2, y + g.h / 2); ctx.quadraticCurveTo(0, y + g.h / 2 + b * 34 * s, -g.w / 2, y + g.h / 2); ctx.closePath();
+      ctx.fillStyle = this.back ? '#3d6fd6' : '#d6403d'; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = INK; ctx.stroke();
+    }
+    ctx.strokeStyle = 'rgba(255,255,255,.6)'; ctx.strokeRect(-g.w / 2 + 6 * s, -(n - 1) * 2 * s - g.h / 2 + 6 * s + b * 17 * s, g.w - 12 * s, g.h - 12 * s);
+    ctx.restore();
+    for (const f of this.fly) this.card(f.x, f.y, f, 1.1);
+    if (this.sayT > 0) bigText(this.say, W / 2, H * 0.3, Math.round(32 * s), HOT, PAPER, W * 0.9);
+  },
+  drawHint(t) { const g = this.geo(), p = (t * 1.2) % 1; finger(g.cx + 20 * g.s, g.cy - 20 * g.s + Math.min(p * 1.4, 1) * 90 * g.s, p < 0.75 ? 0.9 : 0.3); }
+};
+
+/* ---------- 大盛り30: スティックのり ---------- */
+const GLUE_PX = 700;   // 左右にこすって（ひねって）、指を合わせてこの長さ px（SC()）動かすと、のりが全部くり出て、ポキッと折れる
+const GLUE_SEC = 60;   // 机についたのりを、ふき取る（1本）
+const GLUE_BUY = 4, GLUE_YEN = 1000; // 1回でこの数以上折ったら、のりの買い直し
+const glue = {
+  key: 'glue', name: 'スティックのり', prompt: 'くり出せ！', hint: '左右にこすって ひねる', bg: '#e8f0dc',
+  bgm: song(132, [
+    ['bub', 0.08, '72 . 72 . 79 . . . 77 . 76 . 74 . . . 72 . 72 . 81 . . . 79 . 77 . 76 . . .'],
+    ['triangle', 0.13, '48 . . . 55 . . . 53 . . . 55 . . . 48 . . . 57 . . . 55 . . . 43 . . .']
+  ], ['k..hs..hk.k.s..h']),
+  shop: [['スティックのり', 'スティックのり'], ['テープのり', 'テープのり']],
+  bill(t) { const n = t.glue || 0, b = t.glueBuy || 0; return { v: n + '本', n: (b ? 'のりの買い直し・' : '') + '机についたのりをふき取る', sec: n * GLUE_SEC, yen: b * GLUE_YEN }; },
+  init() { this.n = 0; this.ptr = {}; this.ext = 0; this.ph = 0; this.slide = 0; this.fly = []; this.blobs = []; this.tw = 0; this.say = ''; this.sayT = 0; },
+  started() { return this.n > 0; },
+  result() { return this.n + '本'; },
+  commit(tot) { add(tot, 'glue', this.n); add(tot, 'glueBuy', this.n >= GLUE_BUY ? 1 : 0); mx(tot, 'glueMax', this.n); },
+  geo() { const s = SC(), k = 1.45; return { s, k, cx: W / 2, by: H * 0.84, tw: 60 * s * k, th: 150 * s * k, gw: 46 * s * k, gmax: 130 * s * k, desk: H * 0.56 }; }, // k: のりを大きく描く
+  down(id, x) { this.ptr[id] = { x }; }, // どこでもよい
+  move(id, x) {
+    const p = this.ptr[id]; if (!p) return;
+    const dx = x - p.x; p.x = x;
+    if (this.slide > 0) return;
+    const s = SC(); this.ext += Math.abs(dx) / (GLUE_PX * s); this.ph += dx / (8 * s); this.tw += Math.abs(dx);
+    if (this.tw > 60 * s) { this.tw = 0; sfx.twist(); }
+    if (this.ext >= 1) this.snap();
+  },
+  up(id) { if (id == null) this.ptr = {}; else delete this.ptr[id]; },
+  snap() { // ポキッ。折れたのりは机に落ちて、ベタッとつく
+    const g = this.geo(), s = g.s;
+    this.fly.push({ x: g.cx, y: g.by - g.th - g.gmax / 2, vx: rnd(-1, 1) * 260 * s, vy: -rnd(200, 420) * s, r: 0, vr: rnd(-8, 8), land: rnd(g.desk + 30 * s, H - 30 * s) });
+    this.ext = 0; this.slide = 1; sfx.snap();
+    if (scoring()) { this.n++; if (this.n === GLUE_BUY) { this.say = 'のりが もうない…！'; this.sayT = 1; } else { this.say = 'ポキッ！'; this.sayT = 0.4; } }
+  },
+  update(dt) {
+    const s = SC();
+    this.sayT = Math.max(0, this.sayT - dt);
+    if (this.slide > 0) this.slide = Math.max(0, this.slide - dt / 0.3);
+    for (let i = this.fly.length - 1; i >= 0; i--) {
+      const f = this.fly[i]; f.vy += 1800 * s * dt; f.x += f.vx * dt; f.y += f.vy * dt; f.r += f.vr * dt;
+      if (f.vy > 0 && f.y >= f.land) { this.blobs.push({ x: clamp(f.x, 30 * s, W - 30 * s), y: f.land, r: f.r }); this.fly.splice(i, 1); sfx.squish(); }
+    }
+    if (this.blobs.length > 30) this.blobs.shift();
+  },
+  piece(x, y, r, k) { // 折れたのりのかけら
+    const s = SC() * k; ctx.save(); ctx.translate(x, y); ctx.rotate(r); rr(-21 * s, -30 * s, 42 * s, 60 * s, 8 * s); ctx.fillStyle = '#ece4fb'; ctx.fill(); ctx.lineWidth = 2.5; ctx.strokeStyle = INK; ctx.stroke(); ctx.restore();
+  },
+  stick(cx, g, ext) { // のりの本体（下のダイヤルを回すと、上からのりが出てくる）
+    const s = g.s * g.k, top = g.by - g.th;
+    ctx.lineWidth = 3; ctx.strokeStyle = INK;
+    const gh = 8 * s + ext * g.gmax;
+    rr(cx - g.gw / 2, top - gh, g.gw, gh + 10 * s, 10 * s); ctx.fillStyle = '#ece4fb'; ctx.fill(); ctx.stroke();
+    ctx.fillStyle = 'rgba(181,140,255,.35)'; ctx.fillRect(cx - g.gw / 2 + 6 * s, top - gh + 6 * s, 8 * s, gh - 6 * s); // つや
+    rr(cx - g.tw / 2, top, g.tw, g.th - 30 * s, 8 * s); ctx.fillStyle = '#4f86f7'; ctx.fill(); ctx.stroke(); // 筒
+    ctx.fillStyle = PAPER; rr(cx - g.tw / 2 + 8 * s, top + 26 * s, g.tw - 16 * s, 54 * s, 4 * s); ctx.fill(); ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = INK; ctx.font = `${Math.round(16 * s)}px ${DISPLAY}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('の', cx, top + 42 * s); ctx.fillText('り', cx, top + 64 * s); ctx.textAlign = 'left';
+    ctx.lineWidth = 3; rr(cx - g.tw / 2 - 2 * s, g.by - 30 * s, g.tw + 4 * s, 30 * s, 6 * s); ctx.fillStyle = '#2f5fc0'; ctx.fill(); ctx.stroke(); // 回すダイヤル
+    ctx.save(); rr(cx - g.tw / 2 - 2 * s, g.by - 30 * s, g.tw + 4 * s, 30 * s, 6 * s); ctx.clip(); ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.lineWidth = 3 * s;
+    for (let i = -2; i < 10; i++) { const x = cx - g.tw / 2 + (((i * 9 * s + this.ph * 3 * s) % (g.tw + 18 * s)) + g.tw + 18 * s) % (g.tw + 18 * s) - 9 * s; ctx.beginPath(); ctx.moveTo(x, g.by - 28 * s); ctx.lineTo(x, g.by - 2 * s); ctx.stroke(); }
+    ctx.restore();
+  },
+  draw() {
+    const g = this.geo(), s = g.s;
+    ctx.fillStyle = this.bg; ctx.fillRect(0, 0, W, g.desk);
+    ctx.fillStyle = '#d6b07c'; ctx.fillRect(0, g.desk, W, H - g.desk); ctx.fillStyle = INK; ctx.fillRect(0, g.desk - 2, W, 3); // 机
+    ctx.lineWidth = 3; ctx.strokeStyle = INK; ctx.save(); ctx.translate(W * 0.2, g.desk + 70 * s); ctx.rotate(-0.15); rr(-50 * s, -34 * s, 100 * s, 68 * s, 3 * s); ctx.fillStyle = '#ffe9a8'; ctx.fill(); ctx.stroke(); ctx.restore(); // 色紙
+    rr(W * 0.72, g.by - 34 * s, 70 * s, 34 * s, 10 * s); ctx.fillStyle = '#4f86f7'; ctx.fill(); ctx.stroke(); // はずしたキャップ
+    ['#ff5a4e', '#ffd23f', '#5fb35a'].forEach((c, i) => { ctx.fillStyle = c; ctx.fillRect(W * 0.8 + i * 12 * s, g.desk - 84 * s + (i % 2) * 10 * s, 8 * s, 50 * s); ctx.strokeRect(W * 0.8 + i * 12 * s, g.desk - 84 * s + (i % 2) * 10 * s, 8 * s, 50 * s); }); // ペン立て
+    rr(W * 0.78, g.desk - 44 * s, 44 * s, 54 * s, 6 * s); ctx.fillStyle = '#9fd6c4'; ctx.fill(); ctx.stroke();
+    for (const b of this.blobs) { ctx.save(); ctx.translate(b.x, b.y); ctx.beginPath(); ctx.ellipse(0, 6 * s, 30 * s, 9 * s, 0, 0, Math.PI * 2); ctx.fillStyle = 'rgba(181,140,255,.35)'; ctx.fill(); ctx.restore(); this.piece(b.x, b.y - 4 * s, Math.PI / 2 + b.r * 0.05, 1); }
+    if (this.slide > 0) this.stick(g.cx + this.slide * W, g, 0);
+    else this.stick(g.cx, g, this.ext);
+    for (const f of this.fly) this.piece(f.x, f.y, f.r, 1.3);
+    if (this.ext > 0.75 && this.slide <= 0) bigText('ギリギリ…', g.cx, g.by - g.th - g.gmax - 30 * s, Math.round(20 * s), INK, PAPER);
+    if (this.sayT > 0) bigText(this.say, W / 2, H * 0.2, Math.round(32 * s), HOT, PAPER, W * 0.9);
+  },
+  drawHint(t) { const g = this.geo(), p = Math.sin(t * 7); finger(g.cx + p * 70 * g.s, g.by - 10 * g.s, 0.9); }
+};
+
+STAGE_LIST.push(umbrella, keyboard, tabletop, cards, glue);
+ZUKAN_EXTRA.push(
+  { id: 'umbrella', name: '晴れの日の傘', desc: '部屋の中で傘を1回で17本 開く', ok: t => (t.umbrellaMax || 0) >= 17 },
+  { id: 'keyboard', name: '打てない報告書', desc: 'キーボードのキーを1回で17個 外す', ok: t => (t.keyboardMax || 0) >= 17 },
+  { id: 'tabletop', name: 'ネコの気持ち', desc: 'テーブルの物を1回で10個 落とす', ok: t => (t.tabletopMax || 0) >= 10 },
+  { id: 'cards', name: 'ババ抜き中止', desc: 'トランプを1回で250枚 ばらまく', ok: t => (t.cardsMax || 0) >= 250 },
+  { id: 'glue', name: 'のり切れない', desc: 'スティックのりを1回で10本 折る', ok: t => (t.glueMax || 0) >= 10 }
+);
