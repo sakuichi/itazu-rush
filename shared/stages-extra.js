@@ -2703,3 +2703,413 @@ ZUKAN_EXTRA.push(
   { id: 'cards', name: 'ババ抜き中止', desc: 'トランプを1回で250枚 ばらまく', ok: t => (t.cardsMax || 0) >= 250 },
   { id: 'glue', name: 'のり切れない', desc: 'スティックのりを1回で10本 折る', ok: t => (t.glueMax || 0) >= 10 }
 );
+
+/* ===== 第7弾（2026-10-30 追加） ===== */
+Object.assign(sfx, {
+  creak() { tone(180, 120, 0.08, 0.1, 'sawtooth'); },
+  beep() { tone(2000, 2000, 0.06, 0.1, 'square'); },
+  clink() { tone(rnd(2400, 3200), 1800, 0.05, 0.12, 'sine'); noise(0.12, 1800, 0.8, 0.08, 'bandpass', 0.03); },
+  crash() { noise(0.9, 6000, 0.5, 0.35, 'highpass'); noise(0.5, 3000, 1, 0.2, 'bandpass'); tone(520, 480, 0.6, 0.08, 'triangle'); tone(780, 760, 0.5, 0.06, 'triangle'); },
+  whirl() { noise(0.12, rnd(500, 800), 1, 0.08, 'bandpass'); }
+});
+
+/* ---------- 大盛り31: パパのいす ---------- */
+const CHAIR_PX = 250;  // 横に指をこの長さ px（SC()）動かすと、回る速さが1秒に1回ぶん上がる
+const CHAIR_MAX = 4;   // いちばん速いとき、1秒に何回まわるか
+const CHAIR_SEC = 20;  // 回るたびにゆるんだ座面のネジを締め直す（1回）
+const CHAIR_LOOSE = 8, CHAIR_YEN = 1000; // 1回でこの数以上回したら、座面がガタガタになるので、いすの修理
+const chair = {
+  key: 'chair', name: 'パパのいす', prompt: '回せ！', hint: '横にはじいて 回す', bg: '#e3ecf4',
+  bgm: song(150, [
+    ['square', 0.045, '72 . 76 . 79 . 76 . 72 . 76 . 79 . 84 . 83 . 79 . 76 . 79 . 83 . 86 . 84 . .'],
+    ['triangle', 0.13, '48 . . . 48 . . . 55 . . . 55 . . . 50 . . . 50 . . . 55 . . . 43 . . .']
+  ], ['k.hhs.hhk.hhs.hh']),
+  shop: [['オフィスチェア', 'オフィスチェア'], ['いすの修理キット', 'オフィスチェア 修理 ガスシリンダー']],
+  bill(t) { const n = t.chair || 0, b = t.chairFix || 0; return { v: n + '回', n: (b ? 'いすの修理・' : '') + '座面のネジを締め直す', sec: n * CHAIR_SEC, yen: b * CHAIR_YEN }; },
+  init() { this.n = 0; this.ptr = {}; this.a = 0; this.om = 0; this.turn = 0; this.wh = 0; this.papers = []; this.say = ''; this.sayT = 0; },
+  started() { return this.n > 0; },
+  result() { return this.n + '回'; },
+  commit(tot) { add(tot, 'chair', this.n); add(tot, 'chairFix', this.n >= CHAIR_LOOSE ? 1 : 0); mx(tot, 'chairMax', this.n); },
+  geo() { const s = SC(); return { s, cx: W / 2, floor: H * 0.56, by: H * 0.8, seat: H * 0.53 }; },
+  down(id, x) { this.ptr[id] = { x }; }, // どこを押してもよい
+  move(id, x) { // 横に動かしたぶんだけ、いま回っている向きに勢いがつく（左右にこすっても止まらない）
+    const p = this.ptr[id]; if (!p) return;
+    const dx = x - p.x; p.x = x;
+    const dir = Math.sign(this.om) || Math.sign(dx);
+    this.om = clamp(this.om + dir * Math.abs(dx) / (CHAIR_PX * SC()), -CHAIR_MAX, CHAIR_MAX);
+  },
+  up(id) { if (id == null) this.ptr = {}; else delete this.ptr[id]; },
+  update(dt) {
+    const s = SC();
+    this.sayT = Math.max(0, this.sayT - dt);
+    this.om *= Math.exp(-dt * 0.5); // だんだん止まる
+    this.a += this.om * Math.PI * 2 * dt; this.turn += Math.abs(this.om) * dt;
+    while (this.turn >= 1) { // 1回まわった
+      this.turn -= 1; sfx.creak();
+      if (scoring()) { this.n++; if (this.n === CHAIR_LOOSE) { this.say = '座面が ガタガタ…！'; this.sayT = 1; } else if (this.sayT <= 0) { this.say = 'グルン！'; this.sayT = 0.3; } }
+    }
+    this.wh -= dt; if (Math.abs(this.om) > 1.5 && this.wh <= 0) { this.wh = 0.2; sfx.whirl(); }
+    if (Math.abs(this.om) > 2.5 && Math.random() < dt * 3 && this.papers.length < 30) this.papers.push({ x: W * 0.2, y: H * 0.36, vx: rnd(60, 240) * s * Math.sign(this.om || 1), vy: -rnd(60, 160) * s, r: rnd(0, 6), vr: rnd(-6, 6), land: rnd(H * 0.66, H - 20 * s) }); // 風で机の書類が飛ぶ
+    for (const f of this.papers) if (f.y < f.land) { f.vy = Math.min(f.vy + 600 * s * dt, 160 * s); f.x += f.vx * dt; f.y += f.vy * dt; f.r += f.vr * dt; f.vx *= Math.exp(-dt); }
+  },
+  draw() {
+    const g = this.geo(), s = g.s, sink = Math.min(this.n / CHAIR_LOOSE, 1) * 34 * s; // 回すほど座面が下がる
+    ctx.fillStyle = this.bg; ctx.fillRect(0, 0, W, g.floor);
+    ctx.fillStyle = '#9aa7b4'; ctx.fillRect(0, g.floor, W, H - g.floor); ctx.fillStyle = INK; ctx.fillRect(0, g.floor - 2, W, 3); // じゅうたん
+    // パパの机と書類
+    ctx.lineWidth = 3; ctx.strokeStyle = INK;
+    rr(-10 * s, H * 0.38, W * 0.38, 16 * s, 4 * s); ctx.fillStyle = '#a8703f'; ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#8a5a36'; ctx.fillRect(W * 0.3, H * 0.38 + 16 * s, 12 * s, g.floor - H * 0.38 - 10 * s);
+    ctx.fillStyle = PAPER; for (let i = 0; i < 3; i++) { ctx.fillRect(W * 0.06 + i * 4 * s, H * 0.38 - 6 * s - i * 3 * s, W * 0.2, 6 * s); ctx.strokeRect(W * 0.06 + i * 4 * s, H * 0.38 - 6 * s - i * 3 * s, W * 0.2, 6 * s); }
+    for (const f of this.papers) { ctx.save(); ctx.translate(f.x, f.y); ctx.rotate(f.r); ctx.fillStyle = PAPER; ctx.fillRect(-14 * s, -10 * s, 28 * s, 20 * s); ctx.lineWidth = 2; ctx.strokeRect(-14 * s, -10 * s, 28 * s, 20 * s); ctx.fillStyle = '#c4ccd6'; ctx.fillRect(-10 * s, -5 * s, 20 * s, 2 * s); ctx.fillRect(-10 * s, 0, 16 * s, 2 * s); ctx.restore(); }
+    // 脚（5本、キャスターつき。回っている向きで見える位置が変わる）
+    const legs = [];
+    for (let k = 0; k < 5; k++) { const t = this.a + k * Math.PI * 2 / 5; legs.push({ x: g.cx + Math.cos(t) * 80 * s, y: g.by + Math.sin(t) * 16 * s, z: Math.sin(t) }); }
+    legs.sort((p, q) => p.z - q.z);
+    ctx.lineWidth = 3; ctx.strokeStyle = INK;
+    for (const L of legs) { ctx.beginPath(); ctx.moveTo(g.cx, g.by - 10 * s); ctx.lineTo(L.x, L.y); ctx.lineWidth = 9 * s; ctx.strokeStyle = INK; ctx.stroke(); ctx.lineWidth = 5 * s; ctx.strokeStyle = '#5b6372'; ctx.stroke(); ctx.beginPath(); ctx.arc(L.x, L.y + 6 * s, 7 * s, 0, Math.PI * 2); ctx.fillStyle = '#2b3039'; ctx.fill(); }
+    ctx.lineWidth = 3; ctx.strokeStyle = INK;
+    rr(g.cx - 8 * s, g.seat + sink, 16 * s, g.by - g.seat - sink - 6 * s, 4 * s); ctx.fillStyle = '#c0c8d0'; ctx.fill(); ctx.stroke(); // ガスの柱
+    // 背もたれ（正面は布、裏はプラスチック。横を向くと細く見える）
+    const c = Math.cos(this.a), y0 = g.seat + sink, bw = 120 * s * Math.max(0.12, Math.abs(c)), front = c > 0;
+    const back = () => { rr(g.cx - bw / 2, y0 - 170 * s, bw, 150 * s, 18 * s * Math.abs(c) + 2); ctx.fillStyle = front ? '#3a4f7a' : '#23272f'; ctx.fill(); ctx.stroke(); if (front && bw > 40 * s) { ctx.strokeStyle = 'rgba(255,255,255,.18)'; ctx.lineWidth = 2; for (let i = 1; i < 5; i++) { ctx.beginPath(); ctx.moveTo(g.cx - bw / 2 + 8 * s, y0 - 170 * s + i * 30 * s); ctx.lineTo(g.cx + bw / 2 - 8 * s, y0 - 170 * s + i * 30 * s); ctx.stroke(); } ctx.lineWidth = 3; ctx.strokeStyle = INK; } };
+    if (!front) back();
+    ctx.beginPath(); ctx.ellipse(g.cx, y0 + 6 * s, 82 * s, 22 * s, 0, 0, Math.PI * 2); ctx.fillStyle = '#23272f'; ctx.fill(); ctx.stroke(); // 座面の下
+    ctx.beginPath(); ctx.ellipse(g.cx, y0 - 4 * s, 80 * s, 22 * s, 0, 0, Math.PI * 2); ctx.fillStyle = '#3a4f7a'; ctx.fill(); ctx.stroke(); // 座面
+    for (const k of [-1, 1]) { const ax = g.cx + k * 70 * s * Math.sin(this.a + Math.PI / 2); ctx.fillStyle = '#2b3039'; rr(ax - 6 * s, y0 - 46 * s, 12 * s, 40 * s, 4 * s); ctx.fill(); ctx.stroke(); } // ひじかけ
+    if (front) back();
+    // 回っているときの線
+    if (Math.abs(this.om) > 0.8) { ctx.strokeStyle = 'rgba(35,27,46,.45)'; ctx.lineWidth = 3 * s; ctx.lineCap = 'round'; for (let i = 0; i < 3; i++) { const t = this.a * 0.3 + i * 2.1; ctx.beginPath(); ctx.ellipse(g.cx, y0 - 60 * s, 130 * s, 40 * s, 0, t, t + Math.min(1.2, Math.abs(this.om) * 0.3)); ctx.stroke(); } ctx.lineCap = 'butt'; }
+    if (this.sayT > 0) bigText(this.say, W / 2, H * 0.2, Math.round(32 * s), HOT, PAPER, W * 0.9);
+  },
+  drawHint(t) { const g = this.geo(), p = (t * 1.4) % 1; finger(g.cx - 90 * g.s + p * 180 * g.s, g.seat - 60 * g.s, 0.9); }
+};
+
+/* ---------- 大盛り32: 割り箸 ---------- */
+const HASHI_PULL = 50; // 押した所から、この長さ px（SC()）上か下へ動かすと、パキッと割れる
+const HASHI_SEC = 10;  // 割ってしまった箸を、輪ゴムでまとめてしまう（1膳）
+const HASHI_BUY = 7, HASHI_YEN = 1000; // 1回でこの数以上割ったら、お客さん用の割り箸の買い直し
+const HASHI_BAD = 0.25; // ななめに割れる確率（見た目だけ。数には関係しない）
+const hashi = {
+  key: 'hashi', name: '割り箸', prompt: '割れ！', hint: '上か下に 引っぱって 割る', bg: '#f4ead9',
+  bgm: song(140, [
+    ['pluck', 0.08, '69 . 72 . 74 . 76 . 79 . 76 . 74 . . . 72 . 74 . 76 . 79 . 81 . 79 . . . .'],
+    ['triangle', 0.13, '45 . . . 52 . . . 50 . . . 57 . . . 45 . . . 52 . . . 43 . . . 50 . . .']
+  ], ['k..hs.h.k.khs.h.']),
+  shop: [['割り箸', '割り箸 100膳'], ['お箸', '箸 来客用 セット']],
+  bill(t) { const n = t.hashi || 0, b = t.hashiBuy || 0; return { v: n + '膳', n: (b ? 'お客さん用の割り箸の買い直し・' : '') + '輪ゴムでまとめてしまう', sec: n * HASHI_SEC, yen: b * HASHI_YEN }; },
+  init() { this.n = 0; this.ptr = null; this.pull = 0; this.slide = 0; this.fly = []; this.pile = []; this.say = ''; this.sayT = 0; },
+  started() { return this.n > 0; },
+  result() { return this.n + '膳'; },
+  commit(tot) { add(tot, 'hashi', this.n); add(tot, 'hashiBuy', this.n >= HASHI_BUY ? 1 : 0); mx(tot, 'hashiMax', this.n); },
+  geo() { const s = SC(); return { s, cx: W / 2, cy: H * 0.42, len: Math.min(W * 0.8, 260 * s), table: H * 0.3 }; },
+  down(id, x, y) { if (this.ptr == null && this.slide <= 0) { this.ptr = id; this.y0 = y; this.pull = 0; } }, // どこを押してもよい
+  move(id, x, y) {
+    if (id !== this.ptr) return;
+    this.pull = y - this.y0;
+    if (Math.abs(this.pull) > HASHI_PULL * SC()) this.split();
+  },
+  up(id) { if (id == null || id === this.ptr) { this.ptr = null; this.pull = 0; } },
+  split() { // パキッ。たまに、ななめに割れる
+    const g = this.geo(), s = g.s, bad = Math.random() < HASHI_BAD;
+    for (const k of [-1, 1]) this.fly.push({ x: g.cx, y: g.cy + k * 5 * s, vx: rnd(-1, 1) * 160 * s, vy: k * rnd(120, 260) * s - 260 * s, r: k * 0.1, vr: rnd(-3, 3), w: bad ? (k < 0 ? 0.62 : 1) : 1, land: rnd(g.table + 140 * s, H - 30 * s) });
+    this.ptr = null; this.pull = 0; this.slide = 1; sfx.snap();
+    if (scoring()) { this.n++; if (this.n === HASHI_BUY) { this.say = 'お客さん用が ない…！'; this.sayT = 1; } else { this.say = bad ? 'パキッ…（ななめ）' : 'パキッ！'; this.sayT = 0.4; } }
+  },
+  update(dt) {
+    const s = SC();
+    this.sayT = Math.max(0, this.sayT - dt);
+    if (this.slide > 0) this.slide = Math.max(0, this.slide - dt / 0.22);
+    if (this.ptr == null) this.pull *= Math.exp(-dt * 16);
+    for (let i = this.fly.length - 1; i >= 0; i--) {
+      const f = this.fly[i]; f.vy += 1500 * s * dt; f.x += f.vx * dt; f.y += f.vy * dt; f.r += f.vr * dt;
+      if (f.vy > 0 && f.y >= f.land) { f.y = f.land; this.pile.push(f); this.fly.splice(i, 1); sfx.tick(); }
+    }
+    if (this.pile.length > 60) this.pile.shift();
+  },
+  pair(cx, cy, open) { // 割る前の1膳（左の頭がつながっている。引っぱると、右から開く）
+    const g = this.geo(), s = g.s, L = g.len, h = 10 * s, a = open * 0.06;
+    ctx.lineWidth = 3; ctx.strokeStyle = INK;
+    for (const k of [-1, 1]) {
+      ctx.save(); ctx.translate(cx - L / 2, cy); ctx.rotate(k * a);
+      ctx.beginPath(); ctx.moveTo(0, k > 0 ? 0 : -h); ctx.lineTo(L, k > 0 ? 0 : -h * 0.7); ctx.lineTo(L, k > 0 ? h * 0.7 : 0); ctx.lineTo(0, k > 0 ? h : 0); ctx.closePath();
+      ctx.fillStyle = '#f2d9a6'; ctx.fill(); ctx.stroke(); ctx.restore();
+    }
+    ctx.fillStyle = '#c4473d'; ctx.fillRect(cx - L / 2 + L * 0.08, cy - h - 1, 22 * s, h * 2 + 2); ctx.lineWidth = 2; ctx.strokeRect(cx - L / 2 + L * 0.08, cy - h - 1, 22 * s, h * 2 + 2); // 頭の帯
+  },
+  draw() {
+    const g = this.geo(), s = g.s;
+    ctx.fillStyle = this.bg; ctx.fillRect(0, 0, W, g.table);
+    ctx.fillStyle = '#c98a5a'; ctx.fillRect(0, g.table, W, H - g.table); ctx.fillStyle = INK; ctx.fillRect(0, g.table - 2, W, 3); // テーブル
+    ctx.strokeStyle = 'rgba(120,70,30,.25)'; ctx.lineWidth = 2; for (let y = g.table + 40 * s; y < H; y += 60 * s) { ctx.beginPath(); ctx.moveTo(0, y); ctx.bezierCurveTo(W * 0.3, y + 10 * s, W * 0.6, y - 10 * s, W, y); ctx.stroke(); }
+    // 箱（お客さん用 100膳）
+    ctx.lineWidth = 3; ctx.strokeStyle = INK; rr(W * 0.56, H * 0.08, W * 0.36, H * 0.16, 6 * s); ctx.fillStyle = PAPER; ctx.fill(); ctx.stroke();
+    ctx.fillStyle = INK; ctx.font = `${Math.round(14 * s)}px ${DISPLAY}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('お客さん用', W * 0.74, H * 0.125, W * 0.32); ctx.font = `${Math.round(20 * s)}px ${DISPLAY}`; ctx.fillText('100膳', W * 0.74, H * 0.19); ctx.textAlign = 'left';
+    for (const f of this.pile) this.halfStick(f);
+    const open = clamp(Math.abs(this.pull) / (HASHI_PULL * s), 0, 1);
+    this.pair(g.cx + this.slide * W, g.cy + this.pull * 0.2, open);
+    for (const f of this.fly) this.halfStick(f);
+    if (this.sayT > 0) bigText(this.say, W / 2, H * 0.62, Math.round(30 * s), HOT, PAPER, W * 0.9);
+  },
+  halfStick(f) { // 割れた片方
+    const g = this.geo(), s = g.s, L = g.len * 0.5 * f.w, h = 7 * s;
+    ctx.save(); ctx.translate(f.x, f.y); ctx.rotate(f.r); ctx.lineWidth = 2.5; ctx.strokeStyle = INK;
+    ctx.beginPath(); ctx.moveTo(-L / 2, -h / 2); ctx.lineTo(L / 2, -h * 0.3); ctx.lineTo(L / 2, h * 0.3); ctx.lineTo(-L / 2, h / 2); ctx.closePath(); ctx.fillStyle = '#f2d9a6'; ctx.fill(); ctx.stroke();
+    if (f.w < 1) { ctx.beginPath(); ctx.moveTo(L / 2, -h * 0.3); ctx.lineTo(L / 2 + 8 * s, 0); ctx.lineTo(L / 2, h * 0.3); ctx.stroke(); } // ななめに割れたとがり
+    ctx.restore();
+  },
+  drawHint(t) { const g = this.geo(), p = (t * 1.3) % 1; finger(g.cx + 40 * g.s, g.cy + 10 * g.s + p * 70 * g.s, 0.9); }
+};
+
+/* ---------- 大盛り33: エアコン ---------- */
+const AIR_START = 28, AIR_MIN = 16; // 1部屋ごとに、28℃から16℃まで下げられる。下げきったら、となりの部屋へ
+const AIR_SEC = 15;    // 冷えた部屋を暖め直す（1℃）
+const AIR_BILL = 12, AIR_YEN = 1000; // 1回でこの数（℃）以上下げたら、電気代
+const AIR_ROOMS = ['リビング', 'パパの部屋', '寝室', '子ども部屋', '和室'];
+const aircon = {
+  key: 'aircon', name: 'エアコン', prompt: '下げろ！', hint: '▼を 連打して 冷やす', bg: '#f2e6d0',
+  bgm: song(132, [
+    ['bell', 0.05, '84 . 83 . 81 . 79 . 77 . 76 . 74 . . . 72 . 71 . 69 . 67 . 65 . 64 . . . .'],
+    ['triangle', 0.13, '45 . . . 52 . . . 41 . . . 48 . . . 43 . . . 50 . . . 40 . . . 47 . . .']
+  ], ['k...s..hk.h.s...']),
+  shop: [['エアコンのリモコン', 'エアコン リモコン 汎用'], ['毛布', '毛布']],
+  bill(t) { const n = t.aircon || 0, b = t.airconBill || 0; return { v: n + '℃', n: (b ? '電気代・' : '') + '部屋を暖め直す', sec: n * AIR_SEC, yen: b * AIR_YEN }; },
+  init() { this.n = 0; this.temp = AIR_START; this.room = 0; this.pan = 0; this.snow = []; this.blink = 0; this.say = ''; this.sayT = 0; this.press = 0; },
+  started() { return this.n > 0; },
+  result() { return this.n + '℃'; },
+  commit(tot) { add(tot, 'aircon', this.n); add(tot, 'airconBill', this.n >= AIR_BILL ? 1 : 0); mx(tot, 'airconMax', this.n); },
+  geo() { const s = SC(); return { s, rx: W / 2, ry: H * 0.7, rw: 150 * s, rh: 250 * s }; },
+  cold() { return (AIR_START - this.temp) / (AIR_START - AIR_MIN); },
+  down() { // どこを押しても ▼（1回で1℃）
+    if (this.pan > 0) return;
+    this.press = 0.12;
+    if (this.temp <= AIR_MIN) { this.room++; this.pan = 1; this.temp = AIR_START; this.say = 'となりの部屋へ！'; this.sayT = 0.7; return; } // 下げきったら、となりの部屋のエアコン
+    this.temp--; this.blink = 0.15; sfx.beep();
+    if (scoring()) { this.n++; if (this.n === AIR_BILL) { this.say = '電気代が…！'; this.sayT = 1; } }
+  },
+  move() {},
+  up() {},
+  update(dt) {
+    const s = SC();
+    this.sayT = Math.max(0, this.sayT - dt); this.blink = Math.max(0, this.blink - dt); this.press = Math.max(0, this.press - dt);
+    if (this.pan > 0) { this.pan = Math.max(0, this.pan - dt / 0.35); if (this.pan === 0) this.snow = []; }
+    const c = this.cold();
+    if (c > 0.3 && Math.random() < dt * 40 * c) this.snow.push({ x: rnd(0, W), y: -10 * s, v: rnd(40, 90) * s, r: rnd(2, 5) * s, ph: rnd(0, 6) });
+    for (const f of this.snow) { f.y += f.v * dt; f.x += Math.sin(clock * 2 + f.ph) * 20 * s * dt; }
+    if (this.snow.length > 160) this.snow.splice(0, this.snow.length - 160);
+  },
+  roomDraw(dx, cold, name, temp) { // 部屋（冷えるほど青く、霜と雪）
+    const g = this.geo(), s = g.s;
+    ctx.save(); ctx.translate(dx, 0);
+    ctx.fillStyle = this.bg; ctx.fillRect(0, 0, W, H * 0.48); ctx.fillStyle = '#c9a77c'; ctx.fillRect(0, H * 0.48, W, H * 0.52); ctx.fillStyle = INK; ctx.fillRect(0, H * 0.48 - 2, W, 3);
+    ctx.fillStyle = `rgba(120,190,255,${0.45 * cold})`; ctx.fillRect(0, 0, W, H);
+    // 窓（霜がつく）
+    ctx.lineWidth = 3; ctx.strokeStyle = INK; rr(W * 0.06, H * 0.26, W * 0.3, H * 0.17, 4 * s); ctx.fillStyle = '#bfe6ff'; ctx.fill(); ctx.stroke();
+    ctx.fillStyle = `rgba(255,255,255,${0.85 * cold})`; ctx.beginPath(); ctx.ellipse(W * 0.21, H * 0.345, W * 0.15 * (0.4 + cold * 0.6), H * 0.1 * (0.4 + cold * 0.6), 0, 0, Math.PI * 2); ctx.fill();
+    // エアコン本体と風、つらら
+    rr(W * 0.42, H * 0.13, W * 0.52, H * 0.09, 10 * s); ctx.fillStyle = PAPER; ctx.fill(); ctx.stroke();
+    ctx.fillStyle = INK; ctx.fillRect(W * 0.46, H * 0.2, W * 0.44, 3 * s);
+    ctx.font = `${Math.round(12 * s)}px ${DISPLAY}`; ctx.textBaseline = 'middle'; ctx.fillText(name, W * 0.46, H * 0.16, W * 0.3);
+    ctx.fillStyle = '#5fb35a'; ctx.beginPath(); ctx.arc(W * 0.9, H * 0.16, 4 * s, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = `rgba(90,170,255,${0.3 + cold * 0.5})`; ctx.lineWidth = 3 * s; ctx.lineCap = 'round';
+    for (let i = 0; i < 4; i++) { const x = W * (0.48 + i * 0.12), y = H * 0.24 + ((clock * 80 * (1 + cold * 2) + i * 30) % 60) * s; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x - 8 * s, y + 18 * s); ctx.stroke(); }
+    ctx.lineCap = 'butt';
+    const ic = Math.floor(cold * 7); ctx.fillStyle = '#d8f0ff'; ctx.strokeStyle = INK; ctx.lineWidth = 2;
+    for (let i = 0; i < ic; i++) { const x = W * 0.45 + i * W * 0.07, l = (12 + sr(i) * 18) * s * cold; ctx.beginPath(); ctx.moveTo(x - 5 * s, H * 0.22); ctx.lineTo(x + 5 * s, H * 0.22); ctx.lineTo(x, H * 0.22 + l); ctx.closePath(); ctx.fill(); ctx.stroke(); }
+    // 温度計
+    ctx.lineWidth = 3; rr(W * 0.82, H * 0.27, 22 * s, H * 0.17, 11 * s); ctx.fillStyle = PAPER; ctx.fill(); ctx.stroke();
+    const th = (H * 0.17 - 22 * s) * clamp((temp - 10) / 20, 0.05, 1); ctx.fillStyle = cold > 0.6 ? '#4f86f7' : HOT; ctx.fillRect(W * 0.82 + 7 * s, H * 0.44 - 11 * s - th, 8 * s, th);
+    // 床の霜
+    ctx.fillStyle = `rgba(255,255,255,${0.7 * cold})`; for (let i = 0; i < 8; i++) { ctx.beginPath(); ctx.ellipse(W * (0.06 + i * 0.13), H * 0.5 + sr(i + 9) * 20 * s, 30 * s * cold, 8 * s * cold, 0, 0, Math.PI * 2); ctx.fill(); }
+    ctx.restore();
+  },
+  draw() {
+    const g = this.geo(), s = g.s;
+    if (this.pan > 0) { this.roomDraw(-(1 - this.pan) * W, 1, AIR_ROOMS[(this.room - 1) % AIR_ROOMS.length], AIR_MIN); this.roomDraw(this.pan * W, 0, AIR_ROOMS[this.room % AIR_ROOMS.length], AIR_START); }
+    else this.roomDraw(0, this.cold(), AIR_ROOMS[this.room % AIR_ROOMS.length], this.temp);
+    ctx.fillStyle = PAPER; for (const f of this.snow) { ctx.beginPath(); ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2); ctx.fill(); }
+    // リモコン
+    ctx.lineWidth = 3; ctx.strokeStyle = INK;
+    rr(g.rx - g.rw / 2, g.ry - g.rh / 2, g.rw, g.rh, 22 * s); ctx.fillStyle = '#f4f6f8'; ctx.fill(); ctx.stroke();
+    rr(g.rx - g.rw / 2 + 14 * s, g.ry - g.rh / 2 + 16 * s, g.rw - 28 * s, 70 * s, 8 * s); ctx.fillStyle = this.blink > 0 ? '#e6fff0' : '#cfe3d4'; ctx.fill(); ctx.stroke(); // 液晶
+    ctx.fillStyle = INK; ctx.font = `${Math.round(36 * s)}px ${DISPLAY}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(this.temp + '℃', g.rx, g.ry - g.rh / 2 + 52 * s);
+    ctx.font = `${Math.round(11 * s)}px ${DISPLAY}`; ctx.fillText('冷房', g.rx - g.rw / 2 + 32 * s, g.ry - g.rh / 2 + 26 * s);
+    const by = g.ry + 20 * s, bx = g.rx; // ▲ と ▼
+    for (const [y, up] of [[by - 30 * s, true], [by + 40 * s + (this.press > 0 ? 3 * s : 0), false]]) {
+      ctx.beginPath(); ctx.arc(bx, y, 28 * s, 0, Math.PI * 2); ctx.fillStyle = up ? '#c4ccd6' : '#4f86f7'; ctx.fill(); ctx.stroke();
+      ctx.fillStyle = PAPER; ctx.beginPath(); if (up) { ctx.moveTo(bx - 11 * s, y + 6 * s); ctx.lineTo(bx + 11 * s, y + 6 * s); ctx.lineTo(bx, y - 9 * s); } else { ctx.moveTo(bx - 11 * s, y - 6 * s); ctx.lineTo(bx + 11 * s, y - 6 * s); ctx.lineTo(bx, y + 9 * s); } ctx.closePath(); ctx.fill();
+    }
+    ctx.textAlign = 'left';
+    if (this.sayT > 0) bigText(this.say, W / 2, H * 0.36, Math.round(30 * s), HOT, PAPER, W * 0.9);
+  },
+  drawHint(t) { const g = this.geo(); tapHint(g.rx, g.ry + 60 * g.s, t, 5); }
+};
+
+/* ---------- 大盛り34: 製氷皿の氷 ---------- */
+const ICE_TRAY = 12;   // 1皿の氷の数。全部はじいたら、次の皿をひっくり返す
+const ICE_GRAB = 60;   // 氷の真ん中からこの距離 px（SC()）までなら、はじける
+const ICE_FLICK = 20;  // この長さ px（SC()）以上動かして離すと、はじいた向きへすべる
+const ICE_SEC = 15;    // 床にとけた水をふく（1個）
+const ICE_BUY = 6, ICE_YEN = 1000; // 1回でこの数以上（半皿ぶん）ばらまいたら、今夜の氷がないので、ロックアイスを買いに行く
+const ice = {
+  key: 'ice', name: '製氷皿の氷', prompt: 'ばらまけ！', hint: '氷を はじいて すべらせる', bg: '#e8f1f6',
+  bgm: song(156, [
+    ['bell', 0.05, '88 . 84 . 81 . 84 . 88 . 91 . 88 . . . 86 . 83 . 79 . 83 . 86 . 84 . . . .'],
+    ['triangle', 0.13, '48 . . . 55 . . . 52 . . . 55 . . . 50 . . . 55 . . . 43 . . . 47 . . .']
+  ], ['k.h.s.hhk.h.s.h.']),
+  shop: [['製氷皿', '製氷皿'], ['ロックアイス', 'ロックアイス']],
+  bill(t) { const n = t.ice || 0, b = t.iceBuy || 0; return { v: n + '個', n: (b ? 'ロックアイスを買いに行く・' : '') + '床にとけた水をふく', sec: n * ICE_SEC, yen: b * ICE_YEN }; },
+  init() { this.n = 0; this.ptr = {}; this.cubes = []; this.wet = []; this.tray = 0; this.wait = 0; this.say = ''; this.sayT = 0; this.dump(); },
+  started() { return this.n > 0; },
+  result() { return this.n + '個'; },
+  commit(tot) { add(tot, 'ice', this.n); add(tot, 'iceBuy', this.n >= ICE_BUY ? 1 : 0); mx(tot, 'iceMax', this.n); },
+  geo() { const s = SC(); return { s, top: H * 0.24, fx: W / 2, fy: H * 0.13 }; },
+  dump() { // 製氷皿をひっくり返して、氷を床に落とす
+    const g = this.geo(), s = g.s;
+    for (let i = 0; i < ICE_TRAY; i++) this.cubes.push({ x: W / 2 + rnd(-1, 1) * W * 0.3, y: H * 0.5 + rnd(-1, 1) * H * 0.12, vx: 0, vy: 0, r: rnd(0, 1.5), vr: 0, done: false, z: 1, drop: 0.3 + i * 0.02, life: 1 });
+    this.tray = 0.5; sfx.clink(); sfx.clink();
+  },
+  down(id, x, y) { // いちばん近い氷をはじく
+    const r = ICE_GRAB * SC(); let best = null, bd = r;
+    for (const c of this.cubes) { if (c.drop > 0 || c.life < 0.6) continue; const d = Math.hypot(x - c.x, y - c.y); if (d < bd) { bd = d; best = c; } }
+    if (best) this.ptr[id] = { c: best, x0: x, y0: y, x, y, t0: clock };
+  },
+  move(id, x, y) { const p = this.ptr[id]; if (p) { p.x = x; p.y = y; } },
+  up(id) {
+    if (id == null) { this.ptr = {}; return; }
+    const p = this.ptr[id]; delete this.ptr[id]; if (!p) return;
+    const s = SC(), dx = p.x - p.x0, dy = p.y - p.y0, d = Math.hypot(dx, dy); if (d < ICE_FLICK * s) return;
+    const t = Math.max(0.06, clock - p.t0), sp = Math.min(d / t, 1800 * s), c = p.c;
+    c.vx = dx / d * sp; c.vy = dy / d * sp; c.vr = rnd(-8, 8); sfx.clink();
+    if (!c.done) { c.done = true; if (scoring()) { this.n++; if (this.n === ICE_BUY) { this.say = '今夜の氷が ない…！'; this.sayT = 1; } else if (this.sayT <= 0) { this.say = 'ツルーッ'; this.sayT = 0.3; } } }
+  },
+  update(dt) {
+    const g = this.geo(), s = g.s;
+    this.sayT = Math.max(0, this.sayT - dt); this.tray = Math.max(0, this.tray - dt);
+    for (let i = this.cubes.length - 1; i >= 0; i--) {
+      const c = this.cubes[i];
+      if (c.drop > 0) { c.drop -= dt; continue; }
+      const sp = Math.hypot(c.vx, c.vy);
+      c.x += c.vx * dt; c.y += c.vy * dt; c.r += c.vr * dt; c.vx *= Math.exp(-dt * 0.9); c.vy *= Math.exp(-dt * 0.9); c.vr *= Math.exp(-dt * 2);
+      if (c.x < 14 * s || c.x > W - 14 * s) { c.vx = -c.vx * 0.7; c.x = clamp(c.x, 14 * s, W - 14 * s); if (sp > 100 * s) sfx.tick(); } // かべで はね返る
+      if (c.y < g.top + 14 * s || c.y > H - 14 * s) { c.vy = -c.vy * 0.7; c.y = clamp(c.y, g.top + 14 * s, H - 14 * s); if (sp > 100 * s) sfx.tick(); }
+      if (sp > 60 * s && Math.random() < dt * 30) this.wet.push({ x: c.x, y: c.y, r: rnd(6, 11) * s }); // 水のあと
+      if (c.done && sp < 30 * s) { c.life -= dt / 2.5; if (c.life <= 0) this.cubes.splice(i, 1); } // 止まった氷は、だんだんとける
+    }
+    if (this.wet.length > 300) this.wet.splice(0, this.wet.length - 300);
+    if (!this.cubes.some(c => !c.done)) { this.wait += dt; if (this.wait > 0.3) { this.wait = 0; this.dump(); } } // 全部はじいたら、次の皿
+  },
+  cube(x, y, r, k) { const s = SC() * k; ctx.save(); ctx.translate(x, y); ctx.rotate(r); rr(-15 * s, -15 * s, 30 * s, 30 * s, 6 * s); ctx.fillStyle = 'rgba(214,240,255,.92)'; ctx.fill(); ctx.lineWidth = 2.5; ctx.strokeStyle = INK; ctx.stroke(); ctx.fillStyle = 'rgba(255,255,255,.9)'; ctx.fillRect(-9 * s, -9 * s, 7 * s, 5 * s); ctx.restore(); },
+  draw() {
+    const g = this.geo(), s = g.s;
+    ctx.fillStyle = this.bg; ctx.fillRect(0, 0, W, g.top);
+    ctx.fillStyle = '#f3efe6'; ctx.fillRect(0, g.top, W, H - g.top); ctx.fillStyle = INK; ctx.fillRect(0, g.top - 2, W, 3); // 台所の床（上から）
+    ctx.strokeStyle = 'rgba(35,27,46,.12)'; ctx.lineWidth = 2; for (let x = 0; x < W; x += 48 * s) { ctx.beginPath(); ctx.moveTo(x, g.top); ctx.lineTo(x, H); ctx.stroke(); } for (let y = g.top; y < H; y += 48 * s) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+    // 冷蔵庫（冷凍庫が開いている）と製氷皿
+    ctx.lineWidth = 3; ctx.strokeStyle = INK;
+    rr(W * 0.22, H * 0.01, W * 0.56, g.top - H * 0.02, 8 * s); ctx.fillStyle = '#e6eef4'; ctx.fill(); ctx.stroke();
+    rr(W * 0.26, H * 0.04, W * 0.48, H * 0.12, 4 * s); ctx.fillStyle = '#bfe0f5'; ctx.fill(); ctx.stroke();
+    ctx.save(); ctx.translate(g.fx, g.fy - H * 0.02); ctx.rotate(this.tray > 0 ? Math.PI * (this.tray / 0.5) : 0); rr(-60 * s, -10 * s, 120 * s, 20 * s, 3 * s); ctx.fillStyle = '#f4f6f8'; ctx.fill(); ctx.stroke(); for (let i = 1; i < 6; i++) { ctx.beginPath(); ctx.moveTo(-60 * s + i * 20 * s, -10 * s); ctx.lineTo(-60 * s + i * 20 * s, 10 * s); ctx.stroke(); } ctx.restore();
+    ctx.fillStyle = 'rgba(120,180,230,.22)'; for (const w of this.wet) { ctx.beginPath(); ctx.arc(w.x, w.y, w.r, 0, Math.PI * 2); ctx.fill(); }
+    for (const c of this.cubes) {
+      if (c.drop > 0) { const u = clamp(1 - c.drop / 0.3, 0, 1); this.cube(g.fx + (c.x - g.fx) * u, g.fy + (c.y - g.fy) * u, c.r, 0.7 + u * 0.3); continue; }
+      ctx.globalAlpha = clamp(c.life, 0, 1); this.cube(c.x, c.y, c.r, 0.6 + 0.4 * c.life); ctx.globalAlpha = 1;
+    }
+    for (const p of Object.values(this.ptr)) { ctx.strokeStyle = 'rgba(35,27,46,.4)'; ctx.lineWidth = 3 * s; ctx.setLineDash([6 * s, 6 * s]); ctx.beginPath(); ctx.moveTo(p.c.x, p.c.y); ctx.lineTo(p.c.x + (p.x - p.x0), p.c.y + (p.y - p.y0)); ctx.stroke(); ctx.setLineDash([]); }
+    if (this.sayT > 0) bigText(this.say, W / 2, H * 0.32, Math.round(30 * s), HOT, PAPER, W * 0.9);
+  },
+  drawHint(t) { const c = this.cubes.find(c => !c.done && c.drop <= 0) || { x: W / 2, y: H / 2 }, p = (t * 1.4) % 1, s = SC(); finger(c.x + p * 90 * s, c.y + p * 40 * s, p < 0.7 ? 0.9 : 0.3); }
+};
+
+/* ---------- 大盛り35: 鍋のふた ---------- */
+const LID_SWING = 60;  // 横にこの長さ px（SC()）動かすと、ふたが打ち合わさってジャーン。向きを変えて、また同じだけ動かすと、もう1回（ユーザーの指摘で、ふたを持って動かす形から変えた）
+const LID_SEC = 20;    // へこんだふたを直して、ご近所におわびの手紙を書く（1回）
+const LID_KNOCK = 6;   // 鍋のふた：LID_DENT 回鳴らしたあと、この回数ごとに、おとなりから壁をドンッ（ピアノと同じ）
+const LID_DENT = 8, LID_YEN = 1000; // 1回でこの数以上鳴らしたら、ふたがへこんで閉まらないので、鍋の買い直し
+const lids = {
+  key: 'lids', name: '鍋のふた', prompt: '鳴らせ！', hint: '横にスワイプして 打ち鳴らす', bg: '#f6ecd6',
+  bgm: song(120, [
+    ['square', 0.045, '67 . . . 67 . 72 . . . 72 . 76 . 79 . 77 . . . 74 . 71 . . . 67 . . . . .'],
+    ['triangle', 0.14, '43 . . . 43 . . . 48 . . . 48 . . . 41 . . . 41 . . . 43 . . . 43 . . .']
+  ], ['k...s...k.k.s..c']),
+  shop: [['両手鍋', '両手鍋'], ['鍋のふた', '鍋 ふた']],
+  bill(t) { const n = t.lids || 0, b = t.lidsBuy || 0; return { v: n + '回', n: (b ? 'へこんだ鍋の買い直し・' : '') + 'ふたを直して、ご近所におわび', sec: n * LID_SEC, yen: b * LID_YEN }; },
+  init() { this.n = 0; this.ptr = {}; this.t = 9; this.side = 1; this.don = 0; this.nextDon = LID_DENT; /* 最初の「ドンッ！（壁）」は、ふたがへこむのと同じ回 */ this.rings = []; this.shake = 0; this.light = 0; this.say = ''; this.sayT = 0; },
+  started() { return this.n > 0; },
+  result() { return this.n + '回'; },
+  commit(tot) { add(tot, 'lids', this.n); add(tot, 'lidsBuy', this.n >= LID_DENT ? 1 : 0); mx(tot, 'lidsMax', this.n); },
+  geo() { const s = SC(), r = Math.min(W * 0.17, 66 * s); return { s, r, lx: W * 0.25, rx: W * 0.75, y: H * 0.48, top: H * 0.6, bot: H * 0.77 }; }, // y：ふた（鍋の上に持ち上げている）、top・bot：鍋の口と底
+  down(id, x) { this.ptr[id] = { x0: x, dir: 0 }; }, // どこを押してもよい
+  move(id, x) { // 押した所（または、さっき鳴らした所）から横に LID_SWING 動かすと、1回鳴る。同じ向きに動かし続けても鳴らない
+    const p = this.ptr[id]; if (!p) return;
+    const dx = x - p.x0, d = Math.sign(dx);
+    if (d === p.dir) { p.x0 = x; return; } // 同じ向きに続けているあいだは、いちばん端を覚えておく
+    if (Math.abs(dx) >= LID_SWING * SC()) { p.dir = d; p.x0 = x; this.clash(d); }
+  },
+  up(id) { if (id == null) this.ptr = {}; else delete this.ptr[id]; },
+  clash(d) { // ジャーン！ 2枚のふたが真ん中でぶつかって、また開く
+    const g = this.geo();
+    this.t = 0; this.side = d; this.rings.push({ x: W / 2, y: g.y, t: 0 }); this.shake = 0.25; this.light = 1.2; sfx.crash();
+    if (scoring()) {
+      this.n++; if (this.n === LID_DENT) { this.say = 'ふたが へこんだ…！'; this.sayT = 1; } else { this.say = 'ジャーン！'; this.sayT = 0.4; }
+      if (this.n >= this.nextDon) { this.don = 0.7; this.nextDon += LID_KNOCK; sfx.knock(); setTimeout(() => sfx.knock(), 160); } // おとなりから壁をドンッ（ピアノと同じ）
+    }
+  },
+  close() { return this.t < 0.06 ? this.t / 0.06 : Math.exp(-(this.t - 0.06) * 9); }, // ふたの閉じぐあい（1で、ぶつかっている）
+  update(dt) {
+    this.sayT = Math.max(0, this.sayT - dt); this.shake = Math.max(0, this.shake - dt); this.light = Math.max(0, this.light - dt);
+    this.t += dt; this.don = Math.max(0, this.don - dt);
+    for (let i = this.rings.length - 1; i >= 0; i--) { this.rings[i].t += dt; if (this.rings[i].t > 0.5) this.rings.splice(i, 1); }
+  },
+  lid(x, y, k, tilt) { // ふた（正面から見た丸。真ん中につまみ）
+    const g = this.geo(), s = g.s, r = g.r;
+    ctx.save(); ctx.translate(x, y); ctx.rotate(tilt || 0); ctx.lineWidth = 3; ctx.strokeStyle = INK;
+    ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fillStyle = '#c4ccd6'; ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.arc(0, 0, r * 0.82, 0, Math.PI * 2); ctx.fillStyle = '#d9e0e7'; ctx.fill(); ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,.7)'; ctx.beginPath(); ctx.ellipse(-r * 0.35, -r * 0.4, r * 0.25, r * 0.1, -0.6, 0, Math.PI * 2); ctx.fill();
+    ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(0, 0, 14 * s, 0, Math.PI * 2); ctx.fillStyle = '#2b3039'; ctx.fill(); ctx.stroke(); // つまみ
+    if (this.n >= LID_DENT) { ctx.strokeStyle = 'rgba(35,27,46,.5)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(r * 0.3 * k, -r * 0.5); ctx.lineTo(r * 0.5 * k, -r * 0.2); ctx.lineTo(r * 0.35 * k, r * 0.1); ctx.stroke(); } // へこみ
+    ctx.restore();
+  },
+  pot(x) { // コンロの上の両手鍋（ふたを取った口が見える。ふたと同じ色）
+    const g = this.geo(), s = g.s, w = g.r * 0.95, top = g.top, bot = g.bot;
+    ctx.lineWidth = 3; ctx.strokeStyle = INK; ctx.fillStyle = '#2b3039';
+    for (const k of [-1, 1]) { rr(x + k * (w + 8 * s) - 12 * s, top + 16 * s, 24 * s, 12 * s, 5 * s); ctx.fill(); ctx.stroke(); } // 取っ手
+    ctx.beginPath(); ctx.moveTo(x - w, top); ctx.lineTo(x - w, bot - 10 * s); ctx.quadraticCurveTo(x - w, bot, x - w + 10 * s, bot); ctx.lineTo(x + w - 10 * s, bot); ctx.quadraticCurveTo(x + w, bot, x + w, bot - 10 * s); ctx.lineTo(x + w, top); ctx.closePath();
+    ctx.fillStyle = '#c4ccd6'; ctx.fill(); ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,.6)'; ctx.fillRect(x - w * 0.7, top + 14 * s, 8 * s, bot - top - 28 * s); // 光
+    ctx.beginPath(); ctx.ellipse(x, top, w, 10 * s, 0, 0, Math.PI * 2); ctx.fillStyle = '#3a3f4a'; ctx.fill(); ctx.stroke(); // 鍋の口
+  },
+  draw() {
+    const g = this.geo(), s = g.s, sx = this.shake > 0 ? rnd(-1, 1) * 6 * s : 0;
+    ctx.save(); ctx.translate(sx, 0);
+    ctx.fillStyle = this.bg; ctx.fillRect(-10, 0, W + 20, H * 0.7);
+    ctx.fillStyle = '#d7c6a6'; ctx.fillRect(-10, H * 0.7, W + 20, H * 0.3); ctx.fillStyle = INK; ctx.fillRect(-10, H * 0.7 - 2, W + 20, 3);
+    // 台所の窓の外に、おとなりの家（鳴らすと窓に明かりがつく）
+    ctx.lineWidth = 3; ctx.strokeStyle = INK; rr(W * 0.25, H * 0.07, W * 0.5, H * 0.18, 6 * s); ctx.fillStyle = '#26324f'; ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#c9b48f'; ctx.fillRect(W * 0.34, H * 0.12, W * 0.32, H * 0.13); ctx.strokeRect(W * 0.34, H * 0.12, W * 0.32, H * 0.13);
+    ctx.fillStyle = this.light > 0 ? POP : '#4a4a5a'; for (const k of [0, 1]) { ctx.fillRect(W * (0.38 + k * 0.14), H * 0.15, W * 0.1, H * 0.06); ctx.strokeRect(W * (0.38 + k * 0.14), H * 0.15, W * 0.1, H * 0.06); }
+    ctx.fillStyle = PAPER; ctx.beginPath(); ctx.arc(W * 0.68, H * 0.1, 8 * s, 0, Math.PI * 2); ctx.fill(); // 月（夜）
+    // コンロ
+    rr(W * 0.1, H * 0.74, W * 0.8, H * 0.08, 6 * s); ctx.fillStyle = '#3a4150'; ctx.fill(); ctx.stroke();
+    for (const x of [g.lx, g.rx]) { ctx.beginPath(); ctx.ellipse(x, H * 0.78, 34 * s, 9 * s, 0, 0, Math.PI * 2); ctx.strokeStyle = '#9aa3ae'; ctx.lineWidth = 3; ctx.stroke(); }
+    this.pot(g.lx); this.pot(g.rx);
+    ctx.strokeStyle = INK;
+    for (const r of this.rings) { ctx.globalAlpha = 1 - r.t / 0.5; ctx.lineWidth = 4 * s; ctx.strokeStyle = POP; ctx.beginPath(); ctx.arc(r.x, r.y, g.r * (0.8 + r.t * 4), 0, Math.PI * 2); ctx.stroke(); } ctx.globalAlpha = 1;
+    const c = this.close(), m = (W / 2 - g.r * 0.92 - g.lx) * c, tilt = this.side * 0.12 * c;
+    this.lid(g.lx + m, g.y, 1, tilt); this.lid(g.rx - m, g.y, -1, tilt);
+    ctx.restore();
+    if (this.don > 0) bigText('ドンッ！（壁）', W / 2, H * 0.4, Math.round(40 * s), HOT, PAPER, W * 0.9);
+    else if (this.sayT > 0) bigText(this.say, W / 2, H * 0.38, Math.round(34 * s), HOT, PAPER, W * 0.9);
+  },
+  drawHint(t) { const g = this.geo(), p = (t * 1.5) % 1; finger(W / 2 + Math.sin(p * Math.PI * 2) * 80 * g.s, g.y + g.r * 1.3, 0.9); }
+};
+
+STAGE_LIST.push(chair, hashi, aircon, ice, lids);
+ZUKAN_EXTRA.push(
+  { id: 'chair', name: '社長の気分', desc: 'パパのいすを1回で21回 回す', ok: t => (t.chairMax || 0) >= 21 },
+  { id: 'hashi', name: 'お客さん何人？', desc: '割り箸を1回で20膳 割る', ok: t => (t.hashiMax || 0) >= 20 },
+  { id: 'aircon', name: '真夏の冬', desc: 'エアコンを1回で30℃ 下げる', ok: t => (t.airconMax || 0) >= 30 },
+  { id: 'ice', name: '氷河期', desc: '製氷皿の氷を1回で11個 ばらまく', ok: t => (t.iceMax || 0) >= 11 },
+  { id: 'lids', name: 'ご近所の目覚まし', desc: '鍋のふたを1回で40回 鳴らす', ok: t => (t.lidsMax || 0) >= 40 }
+);

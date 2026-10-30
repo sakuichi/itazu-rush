@@ -12,11 +12,11 @@ const OLD_PAGE = fileUrl(path.join(ROOT, 'index.html'));
 const SITE = 'https://sakuichi.github.io/itazu-rush/';
 const OOMORI_SITE = SITE + 'oomori/';
 
-// 既存10種＋新規30種（第1弾5種・第2弾5種・第3弾5種・第4弾5種・第5弾5種・第6弾5種。この順で #chips に並ぶ）
+// 既存10種＋新規35種（第1弾5種・第2弾5種・第3弾5種・第4弾5種・第5弾5種・第6弾5種・第7弾5種。この順で #chips に並ぶ）
 const OLD_KEYS = ['tissue', 'toilet', 'shoji', 'paste', 'shampoo', 'mud', 'toys', 'puddle', 'hose', 'elev'];
-const NEW_KEYS = ['graffiti', 'soda', 'pudding', 'sticker', 'shoe', 'calendar', 'vacuum', 'futon', 'news', 'bubble', 'piano', 'pillow', 'sofa', 'light', 'yarn', 'closet', 'roll', 'balloon', 'clock', 'hanko', 'gift', 'cake', 'bath', 'peel', 'laces', 'umbrella', 'keyboard', 'tabletop', 'cards', 'glue'];
+const NEW_KEYS = ['graffiti', 'soda', 'pudding', 'sticker', 'shoe', 'calendar', 'vacuum', 'futon', 'news', 'bubble', 'piano', 'pillow', 'sofa', 'light', 'yarn', 'closet', 'roll', 'balloon', 'clock', 'hanko', 'gift', 'cake', 'bath', 'peel', 'laces', 'umbrella', 'keyboard', 'tabletop', 'cards', 'glue', 'chair', 'hashi', 'aircon', 'ice', 'lids'];
 const KEYS = OLD_KEYS.concat(NEW_KEYS);
-const NEW_NAMES = { graffiti: '落書き', soda: '炭酸', pudding: 'プリン', sticker: 'シール', shoe: '靴飛ばし', calendar: 'カレンダー', vacuum: '掃除機', futon: '布団', news: '新聞', bubble: 'シャボン玉', piano: 'ピアノ', pillow: '枕', sofa: 'ソファ', light: '電気のスイッチ', yarn: '毛糸玉', closet: '押し入れ', roll: 'ロールスクリーン', balloon: '風船', clock: '時計', hanko: 'ハンコ', gift: '菓子折り', cake: 'ケーキのいちご', bath: '入浴剤', peel: '壁紙', laces: '靴ひも', umbrella: '傘', keyboard: 'キーボード', tabletop: 'テーブルの物', cards: 'トランプ', glue: 'スティックのり' };
+const NEW_NAMES = { graffiti: '落書き', soda: '炭酸', pudding: 'プリン', sticker: 'シール', shoe: '靴飛ばし', calendar: 'カレンダー', vacuum: '掃除機', futon: '布団', news: '新聞', bubble: 'シャボン玉', piano: 'ピアノ', pillow: '枕', sofa: 'ソファ', light: '電気のスイッチ', yarn: '毛糸玉', closet: '押し入れ', roll: 'ロールスクリーン', balloon: '風船', clock: '時計', hanko: 'ハンコ', gift: '菓子折り', cake: 'ケーキのいちご', bath: '入浴剤', peel: '壁紙', laces: '靴ひも', umbrella: '傘', keyboard: 'キーボード', tabletop: 'テーブルの物', cards: 'トランプ', glue: 'スティックのり', chair: 'パパのいす', hashi: '割り箸', aircon: 'エアコン', ice: '製氷皿の氷', lids: '鍋のふた' };
 
 // ページを開く（既存版の helpers.open と同じ形）。errors にはページ内のエラーがたまる
 async function openPage(browser, url, { query = '', width = 390, height = 844 } = {}) {
@@ -215,6 +215,38 @@ const NEW_ACTS = {
     const m = p.mouse;
     await m.move(W * 0.3, H * 0.7); await m.down();
     for (let i = 0; i < 16; i++) await m.move(i % 2 ? W * 0.3 : W * 0.7, H * 0.7, { steps: 4 });
+    await m.up();
+  },
+  // 左右に大きくこすって、いすを回す。回りきるのを待つ
+  async chair(p, W, H) {
+    const m = p.mouse;
+    await m.move(W * 0.2, H * 0.5); await m.down();
+    for (let i = 0; i < 6; i++) await m.move(i % 2 ? W * 0.2 : W * 0.8, H * 0.5, { steps: 5 });
+    await m.up(); await sleep(2500);
+  },
+  // 下へ引っぱって割る×10
+  async hashi(p, W, H) {
+    const m = p.mouse;
+    for (let i = 0; i < 10; i++) { await m.move(W / 2, H * 0.45); await m.down(); await m.move(W / 2, H * 0.45 + 70, { steps: 3 }); await m.up(); await sleep(260); }
+  },
+  // どこでも連打×16（▼。28℃から16℃まで下げきると、となりの部屋へ）
+  async aircon(p, W, H) {
+    for (let i = 0; i < 16; i++) { await p.mouse.click(W / 2, H * 0.78); await sleep(60); }
+  },
+  // 床に落ちてきた氷を、近いものから順にはじく×10
+  async ice(p, W, H) {
+    const m = p.mouse;
+    for (let i = 0; i < 10; i++) {
+      const c = await p.evaluate(() => { const c = window.__itazu.st.cubes.find(c => !c.done && c.drop <= 0); return c ? [c.x, c.y] : null; });
+      if (!c) { await sleep(300); continue; }
+      await m.move(c[0], c[1]); await m.down(); await m.move(c[0] + 60, c[1] + 30, { steps: 2 }); await m.up(); await sleep(60);
+    }
+  },
+  // 横に往復×8（向きを変えるたびに1回鳴る）
+  async lids(p, W, H) {
+    const m = p.mouse;
+    await m.move(W * 0.3, H * 0.6); await m.down();
+    for (let i = 0; i < 8; i++) await m.move(i % 2 ? W * 0.3 : W * 0.7, H * 0.6, { steps: 4 });
     await m.up();
   }
 };

@@ -9,7 +9,7 @@ before(async () => { browser = await launch(); });
 after(async () => { await browser.close(); });
 
 // 表示の形（落書きは小数1けたの m、炭酸は整数の mL、枕は「羽根○枚」、毛糸玉は10m未満なら小数1けたの m、ほかは整数）
-const UNIT = { graffiti: /^\d+\.\dm$/, soda: /^\d+mL$/, pudding: /^\d+個$/, sticker: /^\d+枚$/, shoe: /^\d+個$/, calendar: /^\d+日$/, vacuum: /^\d+個$/, futon: /^\d+回$/, news: /^\d+本$/, bubble: /^\d+個$/, piano: /^\d+音$/, pillow: /^羽根\d+枚$/, sofa: /^\d+cm$/, light: /^\d+回$/, yarn: /^(\d\.\d|\d{2,})m$/, closet: /^\d+枚$/, roll: /^\d+回$/, balloon: /^\d+個$/, clock: /^\d+時間$/, hanko: /^\d+個$/, gift: /^\d+箱$/, cake: /^\d+個$/, bath: /^\d+個$/, peel: /^\d+枚$/, laces: /^\d+個$/, umbrella: /^\d+本$/, keyboard: /^\d+個$/, tabletop: /^\d+個$/, cards: /^\d+枚$/, glue: /^\d+本$/ };
+const UNIT = { graffiti: /^\d+\.\dm$/, soda: /^\d+mL$/, pudding: /^\d+個$/, sticker: /^\d+枚$/, shoe: /^\d+個$/, calendar: /^\d+日$/, vacuum: /^\d+個$/, futon: /^\d+回$/, news: /^\d+本$/, bubble: /^\d+個$/, piano: /^\d+音$/, pillow: /^羽根\d+枚$/, sofa: /^\d+cm$/, light: /^\d+回$/, yarn: /^(\d\.\d|\d{2,})m$/, closet: /^\d+枚$/, roll: /^\d+回$/, balloon: /^\d+個$/, clock: /^\d+時間$/, hanko: /^\d+個$/, gift: /^\d+箱$/, cake: /^\d+個$/, bath: /^\d+個$/, peel: /^\d+枚$/, laces: /^\d+個$/, umbrella: /^\d+本$/, keyboard: /^\d+個$/, tabletop: /^\d+個$/, cards: /^\d+枚$/, glue: /^\d+本$/, chair: /^\d+回$/, hashi: /^\d+膳$/, aircon: /^\d+℃$/, ice: /^\d+個$/, lids: /^\d+回$/ };
 
 for (const key of NEW_KEYS) {
   test(`${key}（${NEW_NAMES[key]}）：操作すると数字が増え、時間切れのあとは増えない`, async () => {
@@ -21,7 +21,7 @@ for (const key of NEW_KEYS) {
   });
 }
 
-// 炭酸・プリン・新聞・シャボン玉は1つでも損害が出る。落書き・シール・カレンダー・掃除機・布団と第3弾・第4弾・第5弾・第6弾の5種は段階制、靴飛ばしは屋根なら0円（犬小屋で損害が出るのは oomori-shoe.test.js、第3弾の境目は oomori-extra3.test.js、第4弾は oomori-extra4.test.js、第5弾は oomori-extra5.test.js、第6弾は oomori-extra6.test.js）
+// 炭酸・プリン・新聞・シャボン玉は1つでも損害が出る。落書き・シール・カレンダー・掃除機・布団と第3弾・第4弾・第5弾・第6弾・第7弾の5種は段階制、靴飛ばしは屋根なら0円（犬小屋で損害が出るのは oomori-shoe.test.js、第3弾の境目は oomori-extra3.test.js、第4弾は oomori-extra4.test.js、第5弾は oomori-extra5.test.js、第6弾は oomori-extra6.test.js、第7弾は oomori-extra7.test.js）
 const MUST_COST = ['soda', 'pudding', 'news', 'bubble'];
 for (const key of NEW_KEYS) {
   test(`${key}（${NEW_NAMES[key]}）：結果に行が出て、損害額が${MUST_COST.includes(key) ? '0円より大きい' : '数字で出る'}`, async () => {

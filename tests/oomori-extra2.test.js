@@ -76,7 +76,7 @@ test('図鑑：新規5種の項目（未来人・なんでも吸引・天井タ�
   const { page } = await openOomori(browser);
   const names = await page.evaluate(() => window.__itazu.ZUKAN.map(z => z.name));
   for (const n of ['未来人', 'なんでも吸引', '天井タッチ', 'シュレッダー', 'シャボン職人']) assert.ok(names.includes(n), n);
-  assert.equal(names.length, 61);
+  assert.equal(names.length, 66);
 });
 
 // 「いたずらっ子」：遊んだ種類を itazurush-oomori-played に入れておき、ティッシュを1本遊んで結果に入る
@@ -94,7 +94,7 @@ async function roundWith(playedBefore) {
   } finally { await b.close(); }
 }
 
-test('図鑑「いたずらっ子」（大盛り）：ほかの39種を遊んだことがあれば、残りの1種を遊んだときに登録される', async () => {
+test('図鑑「いたずらっ子」（大盛り）：ほかの44種を遊んだことがあれば、残りの1種を遊んだときに登録される', async () => {
   const r = await roundWith(KEYS.filter(k => k !== 'tissue'));
   assert.ok(r.res.newZ.includes('いたずらっ子'), `図鑑: ${r.res.newZ.join(',')}`);
   assert.deepEqual(r.saved.slice().sort(), KEYS.slice().sort());
