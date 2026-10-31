@@ -8,7 +8,7 @@ let browser;
 before(async () => { browser = await launch(); });
 after(async () => { await browser.close(); });
 
-test('ランダム20本：全45種なので、1回のゲームの20本は全部ちがう種類で、何回か取り出すと全45種が出る（50回取り出して確かめる）', async () => {
+test('ランダム20本：全50種なので、1回のゲームの20本は全部ちがう種類で、何回か取り出すと全50種が出る（50回取り出して確かめる）', async () => {
   const { page } = await openOomori(browser);
   const orders = await page.evaluate(() => Array.from({ length: 50 }, () => window.__itazu.sampleOrder(20)));
   const seen = new Set();

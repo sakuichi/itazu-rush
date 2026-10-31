@@ -3113,3 +3113,423 @@ ZUKAN_EXTRA.push(
   { id: 'ice', name: '氷河期', desc: '製氷皿の氷を1回で11個 ばらまく', ok: t => (t.iceMax || 0) >= 11 },
   { id: 'lids', name: 'ご近所の目覚まし', desc: '鍋のふたを1回で40回 鳴らす', ok: t => (t.lidsMax || 0) >= 40 }
 );
+
+/* ===== 第8弾（2026-10-30 追加） ===== */
+Object.assign(sfx, {
+  glug() { tone(rnd(220, 300), 140, 0.08, 0.1, 'sine'); },
+  fwip() { noise(0.12, 1400, 0.6, 0.18); },
+  tapeout() { noise(0.06, rnd(900, 1300), 2, 0.12); },
+  tapehit() { noise(0.08, 500, 0.8, 0.25, 'lowpass'); tone(120, 80, 0.06, 0.12, 'sine'); }
+});
+
+/* ---------- 大盛り36: 洗剤 ---------- */
+const DET_FLOW = 120;  // 押しているあいだに出る量（mL/秒）。速さはいつも同じで、洗濯機の口に入った分だけ数える（ユーザーの指摘で、傾ける速さで決まる形から変えた）
+const DET_SWAY = 0.13; // 脱水でガタガタする洗濯機の、上の口の左右のゆれ幅（画面の幅に対して）。洗濯機は形を変えず、下の角を支点に左右へ傾く（ユーザーの指摘で、丸ごと動く形・上だけゆがむ形から変えた）
+const DET_SPIN0 = 1.6, DET_SPIN1 = 3.4, DET_SPIN_UP = 0.4; // ゆれる速さ（ラジアン/秒）。はじめは DET_SPIN0、1秒ごとに DET_SPIN_UP ずつ速くなって DET_SPIN1 まで
+const DET_JUST = 40;   // 規定量（mL）。これを超えると泡があふれ出す
+const DET_BOTTLE = 300; // 1本の量（mL）。空になると次のボトル
+const DET_SEC = 1;     // 泡をすすいで洗濯をやり直す（1mL）
+const DET_BUY = 200, DET_YEN = 1000; // 1回でこの量以上入れたら、洗剤の買い直し
+const detergent = {
+  key: 'detergent', name: '洗剤', prompt: '注げ！', hint: '押したまま 洗濯機を追いかけて 注ぐ', bg: '#dff0f4',
+  bgm: song(128, [
+    ['bub', 0.07, '72 . 74 . 76 . 79 . 76 . 74 . 72 . . . 74 . 76 . 79 . 81 . 79 . 76 . . . .'],
+    ['triangle', 0.13, '48 . . . 55 . . . 53 . . . 55 . . . 48 . . . 55 . . . 43 . . . 50 . . .']
+  ], ['k...s..hk...s.h.']),
+  shop: [['洗濯洗剤', '洗濯洗剤 液体'], ['洗濯洗剤の詰め替え', '洗濯洗剤 詰め替え']],
+  bill(t) { const n = t.detergent || 0, b = t.detergentBuy || 0; return { v: n + 'mL', n: (b ? '洗剤の買い直し・' : '') + '泡をすすいで 洗濯やり直し', sec: n * DET_SEC, yen: b * DET_YEN }; },
+  init() { this.n = 0; this.ml = 0; this.ptr = null; this.fx = W * 0.7; this.tilt = 0; this.left = DET_BOTTLE; this.swap = 0; this.foamV = 0; this.ph = 0; this.t = 0; this.blobs = []; this.spill = []; this.gl = 0; this.say = ''; this.sayT = 0; },
+  started() { return this.n > 0; },
+  result() { return this.n + 'mL'; },
+  commit(tot) { add(tot, 'detergent', this.n); add(tot, 'detergentBuy', this.n >= DET_BUY ? 1 : 0); mx(tot, 'detergentMax', this.n); },
+  geo() { // th：傾き、pv：支点（傾いている側の下の角）、mx：いまの口の真ん中、bx：傾いていないときの真ん中、ow：口の半分の幅
+    const s = SC(), mw = W * 0.46, top = H * 0.56, bot = H * 0.86, bx = W / 2, lean = Math.sin(this.ph);
+    const g = { s, mw, top, bot, bx, ow: W * 0.11, py: H * 0.3, th: lean * Math.asin(Math.min(0.9, W * DET_SWAY / (bot - top))), pv: bx + (lean >= 0 ? 1 : -1) * mw / 2 };
+    g.mx = this.rot(g, bx, top).x; return g;
+  },
+  rot(g, x, y) { const dx = x - g.pv, dy = y - g.bot, c = Math.cos(g.th), n = Math.sin(g.th); return { x: g.pv + dx * c - dy * n, y: g.bot + dx * n + dy * c }; }, // 傾いていないときの点を、傾いた洗濯機の上の点へ
+  down(id, x) { if (this.ptr == null) { this.ptr = id; this.fx = clamp(x, W * 0.06, W * 0.94); } }, // どこを押してもよい。ボトルの口が指の真上に来る
+  move(id, x) { if (id === this.ptr) this.fx = clamp(x, W * 0.06, W * 0.94); },
+  up(id) { if (id == null || id === this.ptr) this.ptr = null; },
+  update(dt) {
+    const s = SC();
+    this.sayT = Math.max(0, this.sayT - dt); this.t += dt;
+    this.ph += dt * Math.min(DET_SPIN1, DET_SPIN0 + this.t * DET_SPIN_UP); // だんだん速くゆれる
+    this.jx = rnd(-1, 1) * 2 * s; this.jy = rnd(-1, 1) * 1.5 * s; // ガタガタ（小刻みな震え。見た目だけ）
+    const g = this.geo();
+    this.tilt += ((this.ptr != null && this.swap <= 0 ? 1 : 0) - this.tilt) * Math.min(1, dt * 14);
+    if (this.swap > 0) { this.swap = Math.max(0, this.swap - dt / 0.45); if (this.swap === 0) this.left = DET_BOTTLE; }
+    const v = this.tilt > 0.6 ? Math.min(DET_FLOW * dt, this.left) : 0;
+    if (v > 0) {
+      this.left -= v;
+      if (Math.abs(this.fx - g.mx) < g.ow) { // 口に入った
+        this.foamV += v;
+        if (scoring()) { const before = this.n; this.ml += v; this.n = Math.floor(this.ml); if (before < DET_BUY && this.n >= DET_BUY) { this.say = '入れすぎ…！'; this.sayT = 1; } }
+        this.gl -= dt; if (this.gl <= 0) { this.gl = 0.12; sfx.glug(); }
+      } else { // 外れて床にこぼれる（数えない）
+        const p = this.spill.find(p => Math.abs(p.x - this.fx) < 16 * s);
+        if (p) p.r = Math.min(46 * s, p.r + 30 * s * dt); else this.spill.push({ x: this.fx, r: 6 * s });
+        if (this.spill.length > 30) this.spill.shift();
+      }
+      if (this.left <= 0) { this.swap = 1; sfx.thud(); }
+    }
+    if (this.foamV > DET_JUST && Math.random() < dt * Math.min(18, this.foamV / 10)) { // 規定量を超えると、泡があふれて前に流れ落ちる（洗濯機といっしょに動き、床に落ちたらそこに残る）
+      const k = Math.random() < 0.5 ? -1 : 1;
+      this.blobs.push({ dx: k * rnd(0.3, 1) * g.mw * 0.48, ly: g.top, x: 0, y: g.top, r: rnd(10, 20) * s, vy: rnd(20, 60) * s, land: rnd(g.bot - 4 * s, H - 10 * s), on: true });
+    }
+    for (const b of this.blobs) {
+      if (b.on) { b.ly += b.vy * dt; b.vy += 120 * s * dt; const p = this.rot(g, g.bx + b.dx, Math.min(b.ly, g.bot)); b.x = p.x; b.y = p.y; if (b.ly >= g.bot) b.on = false; } // 洗濯機の前を流れるあいだは、いっしょに傾く
+      else if (b.y < b.land) b.y = Math.min(b.land, b.y + b.vy * dt);
+    }
+    if (this.blobs.length > 140) this.blobs.shift();
+  },
+  bubble(x, y, r) { ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); },
+  draw() {
+    const g = this.geo(), s = g.s, l = g.bx - g.mw / 2;
+    ctx.fillStyle = this.bg; ctx.fillRect(0, 0, W, g.bot);
+    ctx.fillStyle = '#b9c7cf'; ctx.fillRect(0, g.bot, W, H - g.bot); ctx.fillStyle = INK; ctx.fillRect(0, g.bot - 2, W, 3); // 床
+    ctx.fillStyle = '#3d8fd6'; ctx.globalAlpha = 0.75; for (const p of this.spill) { ctx.beginPath(); ctx.ellipse(p.x, g.bot + 22 * s, p.r, p.r * 0.3, 0, 0, Math.PI * 2); ctx.fill(); } ctx.globalAlpha = 1; // こぼれた洗剤
+    // 洗濯機（たて型。ふたが開いている。脱水でガタガタ）
+    ctx.save(); ctx.translate(g.pv + (this.jx || 0), g.bot + (this.jy || 0)); ctx.rotate(g.th); ctx.translate(-g.pv, -g.bot); // 下の角を支点に傾ける
+    ctx.lineWidth = 3; ctx.strokeStyle = INK;
+    rr(l + 6 * s, g.top - 100 * s, g.mw - 12 * s, 100 * s, 10 * s); ctx.fillStyle = '#e9eef2'; ctx.fill(); ctx.stroke(); // 開いたふた
+    rr(l, g.top, g.mw, g.bot - g.top, 12 * s); ctx.fillStyle = PAPER; ctx.fill(); ctx.stroke();
+    rr(l + 10 * s, g.top + 20 * s, g.mw - 20 * s, 30 * s, 6 * s); ctx.fillStyle = '#cfe3ec'; ctx.fill(); ctx.stroke(); // 操作パネル
+    ctx.fillStyle = INK; ctx.font = `${Math.round(12 * s)}px ${DISPLAY}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('脱水中・洗剤 ' + DET_JUST + 'mL', g.bx, g.top + 35 * s, g.mw - 30 * s); ctx.textAlign = 'left';
+    ctx.beginPath(); ctx.ellipse(g.bx, g.top, g.ow, 11 * s, 0, 0, Math.PI * 2); ctx.fillStyle = '#5a6b78'; ctx.fill(); ctx.stroke(); // 洗濯槽の口
+    const f = Math.min(1, this.foamV / (DET_BOTTLE * 1.5)), fh = this.foamV > 0 ? 6 * s + f * 80 * s : 0; // 泡（入れるほど盛り上がる）
+    ctx.fillStyle = '#ffffff'; ctx.lineWidth = 2;
+    if (fh > 0) for (let i = 0; i < 7; i++) { const u = (i + 0.5) / 7; this.bubble(g.bx + (u - 0.5) * g.ow * 2, g.top - fh * (0.4 + 0.6 * Math.sin(u * Math.PI)) + 8 * s, (11 + 8 * f) * s); }
+    ctx.restore();
+    // ゆれの線
+    ctx.strokeStyle = 'rgba(35,27,46,.4)'; ctx.lineWidth = 3 * s; const sd = Math.sign(Math.cos(this.ph)) || 1; for (const k of [0.3, 0.6]) { ctx.beginPath(); const o = this.rot(g, g.bx - sd * g.mw / 2, g.top + (g.bot - g.top) * k); ctx.moveTo(o.x - sd * 10 * s, o.y); ctx.lineTo(o.x - sd * 30 * s, o.y); ctx.stroke(); }
+    ctx.fillStyle = '#ffffff'; ctx.strokeStyle = INK; ctx.lineWidth = 2; for (const b of this.blobs) this.bubble(b.x, b.y, b.r);
+    // ボトル（口が指の真上。押すと傾いて注ぐ）
+    const a = -this.tilt * 1.9, px = this.fx - Math.sin(a) * 60 * s, py = g.py + Math.cos(a) * 60 * s, sy = g.py; // ボトルの口を (fx, g.py) に置く
+    if (this.tilt > 0.6 && this.swap <= 0) { const hit = Math.abs(this.fx - g.mx) < g.ow; ctx.strokeStyle = '#3d8fd6'; ctx.lineWidth = 7 * s; ctx.beginPath(); ctx.moveTo(this.fx, sy); ctx.lineTo(this.fx, hit ? g.top : g.bot + 20 * s); ctx.stroke(); }
+    ctx.save(); ctx.translate(px, py - H * 0.5 * this.swap); ctx.rotate(a); ctx.lineWidth = 3; ctx.strokeStyle = INK; // 空になると、上から次のボトル
+    rr(-30 * s, -40 * s, 60 * s, 95 * s, 12 * s); ctx.fillStyle = '#ffffff'; ctx.fill(); ctx.stroke();
+    const lv = this.left / DET_BOTTLE; ctx.fillStyle = '#3d8fd6'; ctx.fillRect(-26 * s, 51 * s - 86 * s * lv, 52 * s, 86 * s * lv); // 中身
+    rr(-30 * s, -40 * s, 60 * s, 95 * s, 12 * s); ctx.stroke();
+    rr(-12 * s, -60 * s, 24 * s, 22 * s, 4 * s); ctx.fillStyle = '#2f6fb0'; ctx.fill(); ctx.stroke(); // キャップ
+    rr(-24 * s, -6 * s, 48 * s, 30 * s, 4 * s); ctx.fillStyle = PAPER; ctx.fill(); ctx.stroke();
+    ctx.fillStyle = INK; ctx.font = `${Math.round(13 * s)}px ${DISPLAY}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('洗剤', 0, 9 * s); ctx.textAlign = 'left';
+    ctx.restore();
+    if (this.sayT > 0) bigText(this.say, W / 2, H * 0.14, Math.round(30 * s), HOT, PAPER, W * 0.9);
+  },
+  drawHint(t) { const g = this.geo(); finger(g.mx, g.py + 40 * g.s, 0.9); }
+};
+
+/* ---------- 大盛り37: 靴下 ---------- */
+const SOCK_GRAB = 85;  // 靴下の真ん中からこの距離 px（SC()）までなら、つまめる（ユーザーの指摘で50から広げた）
+const SOCK_HIDE = 110; // つまんだ所からこの長さ px（SC()）以上はなして離すと、いちばん近いすき間に隠れる
+const SOCK_SEC = 40;   // かたほうを探す（1足）
+const SOCK_BUY = 5, SOCK_YEN = 1000; // 1回でこの数以上かたほうにしたら、靴下の買い直し
+const SOCK_COL = [['#e4574b', '#ffffff'], ['#3a6fb0', '#ffd23f'], ['#4fae6a', '#ffffff'], ['#f2a33a', '#7a4a2a'], ['#8b5fbf', '#ffd23f'], ['#2b3039', '#e4574b'], ['#ff9fb2', '#ffffff']];
+const socks = {
+  key: 'socks', name: '靴下', prompt: '隠せ！', hint: 'かたほうを つまんで 隠す', bg: '#f3eadb',
+  bgm: song(136, [
+    ['pluck', 0.08, '67 . 71 . 74 . 71 . 72 . 76 . 79 . . . 77 . 74 . 71 . 74 . 67 . . . . . .'],
+    ['triangle', 0.13, '43 . . . 50 . . . 48 . . . 55 . . . 50 . . . 43 . . . 47 . . . 50 . . .']
+  ], ['k.h.s.h.k.k.s.hh']),
+  shop: [['靴下', '靴下 セット'], ['洗濯ネット', '洗濯ネット 靴下']],
+  bill(t) { const n = t.socks || 0, b = t.socksBuy || 0; return { v: n + '足', n: (b ? '靴下の買い直し・' : '') + 'かたほうを探す', sec: n * SOCK_SEC, yen: b * SOCK_YEN }; },
+  init() { this.n = 0; this.ptr = null; this.k = 0; this.pair = this.newPair(); this.pop = 1; this.fly = []; this.lone = []; this.say = ''; this.sayT = 0; },
+  started() { return this.n > 0; },
+  result() { return this.n + '足'; },
+  commit(tot) { add(tot, 'socks', this.n); add(tot, 'socksBuy', this.n >= SOCK_BUY ? 1 : 0); mx(tot, 'socksMax', this.n); },
+  geo() { const s = SC(); return { s, bx: W / 2, by: H * 0.8, sy: H * 0.8 - 62 * s, gap: 46 * s, line: H * 0.17 }; }, // sy：かごに入っている靴下（下はかごに隠れる）
+  spots() { const s = SC(); return [{ x: W * 0.17, y: H * 0.4, name: 'ソファ' }, { x: W * 0.86, y: H * 0.33, name: 'カーテン' }, { x: W * 0.5, y: H * 0.45, name: 'たんす' }]; },
+  newPair() { const c = SOCK_COL[this.k++ % SOCK_COL.length]; return { c, at: [{ dx: 0, dy: 0 }, { dx: 0, dy: 0 }] }; },
+  sockXY(i) { const g = this.geo(), a = this.pair.at[i], up = (1 - this.pop) * 60 * g.s; return { x: g.bx + (i ? 1 : -1) * g.gap + a.dx, y: g.sy + up + a.dy }; },
+  down(id, x, y) {
+    if (this.ptr || this.pop < 1) return;
+    const r = SOCK_GRAB * SC(); let best = -1, bd = r;
+    for (const i of [0, 1]) { const p = this.sockXY(i), d = Math.hypot(x - (p.x + (i ? 14 : -14) * SC()), y - p.y); if (d < bd) { bd = d; best = i; } } // 真ん中は、つま先のほうへ少しずらした所
+    if (best >= 0) this.ptr = { id, i: best, x0: x, y0: y };
+  },
+  move(id, x, y) { const p = this.ptr; if (!p || p.id !== id) return; const a = this.pair.at[p.i]; a.dx = x - p.x0; a.dy = y - p.y0; },
+  up(id) {
+    const p = this.ptr; if (!p || (id != null && p.id !== id)) return; this.ptr = null;
+    const a = this.pair.at[p.i];
+    if (id != null && Math.hypot(a.dx, a.dy) >= SOCK_HIDE * SC()) this.hide(p.i);
+    else { a.dx = 0; a.dy = 0; }
+  },
+  hide(i) { // つまんだ方は、いちばん近いすき間へ。残った方は、物干しの「かたほう」コーナーへ
+    const s = SC(), p = this.sockXY(i), o = this.sockXY(1 - i);
+    let sp = null, bd = 1e9; for (const t of this.spots()) { const d = Math.hypot(p.x - t.x, p.y - t.y); if (d < bd) { bd = d; sp = t; } }
+    this.fly.push({ x: p.x, y: p.y, tx: sp.x, ty: sp.y, t: 0, c: this.pair.c, flip: i });
+    const slot = this.lone.length % 9;
+    this.lone.push({ x: o.x, y: o.y, tx: W * (0.08 + slot * 0.105), ty: this.geo().line + 32 * s + Math.floor(this.lone.length / 9) * 6 * s, t: 0, c: this.pair.c, flip: 1 - i });
+    if (this.lone.length > 27) this.lone.shift();
+    sfx.fwip();
+    if (scoring()) { this.n++; if (this.n === SOCK_BUY) { this.say = 'かたほうだらけ…！'; this.sayT = 1; } else { this.say = sp.name + 'に スッ'; this.sayT = 0.5; } }
+    this.pair = this.newPair(); this.pop = 0;
+  },
+  update(dt) {
+    this.sayT = Math.max(0, this.sayT - dt);
+    this.pop = Math.min(1, this.pop + dt / 0.18);
+    for (const f of this.fly) f.t = Math.min(1, f.t + dt / 0.3);
+    for (let i = this.fly.length - 1; i >= 0; i--) if (this.fly[i].t >= 1) this.fly.splice(i, 1);
+    for (const f of this.lone) f.t = Math.min(1, f.t + dt / 0.35);
+  },
+  sock(x, y, c, flip, sc, rot) { // 靴下1枚（はき口が上、つま先が横）
+    const s = SC() * (sc == null ? 1 : sc), k = flip ? -1 : 1;
+    ctx.save(); ctx.translate(x, y); ctx.rotate(rot || 0); ctx.scale(k, 1); ctx.lineWidth = 3; ctx.strokeStyle = INK;
+    ctx.beginPath(); ctx.moveTo(-12 * s, -38 * s); ctx.lineTo(12 * s, -38 * s); ctx.lineTo(12 * s, 14 * s); ctx.quadraticCurveTo(12 * s, 24 * s, 24 * s, 24 * s); ctx.lineTo(30 * s, 24 * s); ctx.quadraticCurveTo(40 * s, 24 * s, 40 * s, 32 * s); ctx.quadraticCurveTo(40 * s, 40 * s, 30 * s, 40 * s); ctx.lineTo(-2 * s, 40 * s); ctx.quadraticCurveTo(-12 * s, 40 * s, -12 * s, 28 * s); ctx.closePath();
+    ctx.fillStyle = c[0]; ctx.fill(); ctx.stroke();
+    ctx.fillStyle = c[1]; for (const yy of [-28, -14]) ctx.fillRect(-10 * s, yy * s, 20 * s, 5 * s); // しま
+    ctx.fillRect(-12 * s, -38 * s, 24 * s, 6 * s); ctx.strokeRect(-12 * s, -38 * s, 24 * s, 6 * s); // はき口
+    ctx.restore();
+  },
+  draw() {
+    const g = this.geo(), s = g.s;
+    ctx.fillStyle = this.bg; ctx.fillRect(0, 0, W, H * 0.56);
+    ctx.fillStyle = '#c9a77a'; ctx.fillRect(0, H * 0.56, W, H * 0.44); ctx.fillStyle = INK; ctx.fillRect(0, H * 0.56 - 2, W, 3); // 床
+    ctx.lineWidth = 3; ctx.strokeStyle = INK;
+    // カーテン（右）・たんす（真ん中）・ソファ（左）。すき間に隠す
+    ctx.fillStyle = '#a7c7e7'; ctx.fillRect(W * 0.76, H * 0.24, W * 0.24, H * 0.32); ctx.strokeRect(W * 0.76, H * 0.24, W * 0.26, H * 0.32);
+    ctx.strokeStyle = 'rgba(35,27,46,.3)'; for (let i = 1; i < 4; i++) { ctx.beginPath(); ctx.moveTo(W * (0.76 + i * 0.06), H * 0.24); ctx.lineTo(W * (0.76 + i * 0.06), H * 0.56); ctx.stroke(); } ctx.strokeStyle = INK;
+    rr(W * 0.38, H * 0.3, W * 0.24, H * 0.26, 4 * s); ctx.fillStyle = '#b07a48'; ctx.fill(); ctx.stroke();
+    for (let i = 0; i < 3; i++) { const y = H * 0.32 + i * H * 0.075; ctx.strokeRect(W * 0.4, y, W * 0.2, H * 0.06); ctx.beginPath(); ctx.arc(W * 0.5, y + H * 0.03, 3 * s, 0, Math.PI * 2); ctx.fillStyle = INK; ctx.fill(); }
+    rr(-10 * s, H * 0.36, W * 0.36, H * 0.2, 14 * s); ctx.fillStyle = '#d9694f'; ctx.fill(); ctx.stroke();
+    rr(-10 * s, H * 0.3, W * 0.3, H * 0.1, 12 * s); ctx.fill(); ctx.stroke();
+    // 物干し（かたほうだけの靴下が並んでいく）
+    ctx.beginPath(); ctx.moveTo(0, g.line); ctx.lineTo(W, g.line); ctx.lineWidth = 2; ctx.stroke(); ctx.lineWidth = 3;
+    ctx.fillStyle = INK; ctx.font = `${Math.round(12 * s)}px ${DISPLAY}`; ctx.textAlign = 'right'; ctx.fillText('かたほうだけ', W - 8 * s, g.line - 8 * s); ctx.textAlign = 'left';
+    for (const f of this.lone) { const e = 1 - Math.pow(1 - f.t, 3); this.sock(f.x + (f.tx - f.x) * e, f.y + (f.ty - f.y) * e, f.c, f.flip, 1 - 0.45 * e); }
+    for (const f of this.fly) { const e = f.t; this.sock(f.x + (f.tx - f.x) * e, f.y + (f.ty - f.y) * e, f.c, f.flip, 1 - 0.9 * e, e * 3); }
+    for (const i of [0, 1]) { const p = this.sockXY(i); this.sock(p.x, p.y, this.pair.c, i === 0); }
+    // せんたくかご（靴下の前）
+    rr(g.bx - 110 * s, g.by - 30 * s, 220 * s, 90 * s, 14 * s); ctx.fillStyle = '#e8c27a'; ctx.fill(); ctx.stroke();
+    ctx.strokeStyle = 'rgba(35,27,46,.35)'; for (let i = 1; i < 8; i++) { ctx.beginPath(); ctx.moveTo(g.bx - 110 * s + i * 27.5 * s, g.by - 30 * s); ctx.lineTo(g.bx - 110 * s + i * 27.5 * s, g.by + 60 * s); ctx.stroke(); } ctx.strokeStyle = INK;
+    if (this.ptr) { const p = this.sockXY(this.ptr.i); this.sock(p.x, p.y, this.pair.c, this.ptr.i === 0); } // つまんでいる方は、かごより前に
+    if (this.sayT > 0) bigText(this.say, W / 2, H * 0.27, Math.round(28 * s), HOT, PAPER, W * 0.9);
+  },
+  drawHint(t) { const g = this.geo(), p = (t * 1.1) % 1, a = this.sockXY(0); finger(a.x - p * 90 * g.s, a.y - p * 140 * g.s, 0.9); }
+};
+
+/* ---------- 大盛り38: クレヨン ---------- */
+const CRAY_BOX = 12;   // 1箱の本数。全部折ると、次の箱
+const CRAY_SEC = 5;    // 折れたクレヨンを、紙で巻いてまとめる（1本）
+const CRAY_BUY = 12, CRAY_YEN = 1000; // 1回でこの数以上折ったら、クレヨンの買い直し
+const CRAY_COL = ['#e4574b', '#f28c38', '#ffd23f', '#9bd14f', '#3fae5a', '#3fb7c9', '#3a6fb0', '#2c3f8f', '#8b5fbf', '#ff9fb2', '#8a5a36', '#2b3039'];
+const crayon = {
+  key: 'crayon', name: 'クレヨン', prompt: '折れ！', hint: 'タップ、またはなぞって 全部', bg: '#fbf0dc',
+  bgm: song(144, [
+    ['square', 0.045, '72 . 72 . 74 . 76 . 79 . . . 76 . 74 . 72 . 74 . 76 . 72 . 67 . . . .'],
+    ['triangle', 0.13, '48 . . . 52 . . . 55 . . . 52 . . . 53 . . . 50 . . . 55 . . . 43 . . .']
+  ], ['k.hhs.h.k.hhs.hc']),
+  shop: [['クレヨン', 'クレヨン 12色'], ['折れにくいクレヨン', 'クレヨン 折れにくい']],
+  bill(t) { const n = t.crayon || 0, b = t.crayonBuy || 0; return { v: n + '本', n: (b ? 'クレヨンの買い直し・' : '') + '紙で巻いてまとめる', sec: n * CRAY_SEC, yen: b * CRAY_YEN }; },
+  init() { this.n = 0; this.box = this.newBox(); this.slide = 0; this.wait = 0; this.bits = []; this.last = {}; this.say = ''; this.sayT = 0; },
+  started() { return this.n > 0; },
+  result() { return this.n + '本'; },
+  commit(tot) { add(tot, 'crayon', this.n); add(tot, 'crayonBuy', this.n >= CRAY_BUY ? 1 : 0); mx(tot, 'crayonMax', this.n); },
+  geo() { const s = SC(), w = Math.min(W * 0.8, 340 * s); return { s, l: (W - w) / 2, w, cw: w / CRAY_BOX, top: H * 0.38, len: 150 * s, box: H * 0.52 }; },
+  newBox() { const a = []; for (let i = 0; i < CRAY_BOX; i++) a.push({ c: CRAY_COL[i % CRAY_COL.length], broke: false }); return a; }, // 色が足りないときは、はじめの色からくり返す
+  hit(x, y) { // 押した所・なぞった所のクレヨンを折る
+    const g = this.geo(); if (this.slide > 0 || y < g.top - 20 * g.s || y > g.box + 30 * g.s) return;
+    const i = Math.floor((x - g.l) / g.cw); if (i < 0 || i >= CRAY_BOX) return;
+    const c = this.box[i]; if (c.broke) return;
+    c.broke = true; sfx.snap();
+    this.bits.push({ x: g.l + (i + 0.5) * g.cw, y: g.top + g.len * 0.25, vx: rnd(-1, 1) * 160 * g.s, vy: -rnd(120, 260) * g.s, r: 0, vr: rnd(-8, 8), c: c.c, land: rnd(g.box + 140 * g.s, H - 20 * g.s) });
+    if (scoring()) { this.n++; if (this.n === CRAY_BUY) { this.say = 'もう 描けない…！'; this.sayT = 1; } else if (this.sayT <= 0) { this.say = 'ポキッ'; this.sayT = 0.25; } }
+    if (this.box.every(c => c.broke)) this.wait = 0.25;
+  },
+  down(id, x, y) { this.last[id] = { x, y }; this.hit(x, y); },
+  move(id, x, y) { // 速くなぞっても、通ったクレヨンは全部折る
+    const p = this.last[id]; if (!p) return;
+    const g = this.geo(), n = Math.max(1, Math.ceil(Math.abs(x - p.x) / (g.cw * 0.5)));
+    for (let k = 1; k <= n; k++) this.hit(p.x + (x - p.x) * k / n, p.y + (y - p.y) * k / n);
+    this.last[id] = { x, y };
+  },
+  up(id) { if (id == null) this.last = {}; else delete this.last[id]; },
+  update(dt) {
+    const s = SC();
+    this.sayT = Math.max(0, this.sayT - dt);
+    if (this.wait > 0) { this.wait -= dt; if (this.wait <= 0) { this.slide = 1; this.box = this.newBox(); } }
+    if (this.slide > 0) this.slide = Math.max(0, this.slide - dt / 0.3);
+    for (const b of this.bits) if (b.y < b.land || b.vy < 0) { b.vy += 1400 * s * dt; b.x += b.vx * dt; b.y += b.vy * dt; b.r += b.vr * dt; if (b.y >= b.land && b.vy > 0) { b.y = b.land; sfx.tick(); } }
+    if (this.bits.length > 80) this.bits.shift();
+  },
+  stick(x, y, len, c, rot, tip) { // クレヨン1本（tip：とがった先がある）
+    const s = SC(), w = 9 * s;
+    ctx.save(); ctx.translate(x, y); ctx.rotate(rot || 0); ctx.lineWidth = 2.5; ctx.strokeStyle = INK;
+    ctx.beginPath(); if (tip) { ctx.moveTo(-w * 0.5, -len / 2 + 10 * s); ctx.lineTo(0, -len / 2); ctx.lineTo(w * 0.5, -len / 2 + 10 * s); } else { ctx.moveTo(-w, -len / 2); ctx.lineTo(w, -len / 2); }
+    ctx.lineTo(w, len / 2); ctx.lineTo(-w, len / 2); ctx.closePath(); ctx.fillStyle = c; ctx.fill(); ctx.stroke();
+    if (len > 30 * s) { ctx.fillStyle = PAPER; ctx.fillRect(-w, -len * 0.1, w * 2, len * 0.35); ctx.strokeRect(-w, -len * 0.1, w * 2, len * 0.35); } // 紙
+    ctx.restore();
+  },
+  draw() {
+    const g = this.geo(), s = g.s, off = this.slide * W;
+    ctx.fillStyle = this.bg; ctx.fillRect(0, 0, W, H * 0.3);
+    ctx.fillStyle = '#d9b48a'; ctx.fillRect(0, H * 0.3, W, H * 0.7); ctx.fillStyle = INK; ctx.fillRect(0, H * 0.3 - 2, W, 3); // 机
+    // 描きかけの絵（画用紙）
+    ctx.lineWidth = 3; ctx.strokeStyle = INK; ctx.fillStyle = PAPER; ctx.save(); ctx.translate(W * 0.5, H * 0.16); ctx.rotate(-0.04); ctx.fillRect(-W * 0.3, -H * 0.1, W * 0.6, H * 0.18); ctx.strokeRect(-W * 0.3, -H * 0.1, W * 0.6, H * 0.18);
+    ctx.fillStyle = '#ffd23f'; ctx.beginPath(); ctx.arc(-W * 0.18, -H * 0.04, 16 * s, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = '#3fae5a'; ctx.beginPath(); ctx.moveTo(-W * 0.28, H * 0.05); ctx.quadraticCurveTo(0, -H * 0.01, W * 0.28, H * 0.05); ctx.stroke(); ctx.restore();
+    // クレヨン（箱に立っている）
+    for (let i = 0; i < CRAY_BOX; i++) {
+      const c = this.box[i], x = g.l + (i + 0.5) * g.cw + off;
+      if (c.broke) this.stick(x, g.box - g.len * 0.2, g.len * 0.6, c.c, 0, false);
+      else this.stick(x, g.top + g.len / 2, g.len, c.c, 0, true);
+    }
+    rr(g.l - 10 * s + off, g.box, g.w + 20 * s, 70 * s, 6 * s); ctx.fillStyle = '#3a6fb0'; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = INK; ctx.stroke(); // 箱
+    ctx.fillStyle = PAPER; ctx.font = `${Math.round(18 * s)}px ${DISPLAY}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('クレヨン ' + CRAY_BOX + 'いろ', W / 2 + off, g.box + 35 * s); ctx.textAlign = 'left';
+    for (const b of this.bits) this.stick(b.x, b.y, g.len * 0.4, b.c, b.r, true);
+    if (this.sayT > 0) bigText(this.say, W / 2, H * 0.84, Math.round(30 * s), HOT, PAPER, W * 0.9);
+  },
+  drawHint(t) { const g = this.geo(), p = (t * 1.2) % 1; finger(g.l + p * g.w, g.top + g.len * 0.3, 0.9); }
+};
+
+/* ---------- 大盛り39: ガムテープ ---------- */
+const TAPE_MIN = 30;   // 引っぱったテープがこの長さ px（SC()）より短いと、貼れない
+const TAPE_PX = 200;   // 画面でこの長さ px（SC()）が、テープ1m
+const TAPE_SEC = 30;   // テープのあとを はがしてふく（1m）
+const TAPE_BUY = 5, TAPE_YEN = 1000; // 1回でこの長さ（m）以上貼ったら、ガムテープとシールはがしの買い直し
+const tapeM = n => (Math.floor(n * 10) / 10).toFixed(1) + 'm'; // 表示は小数1けたで切り捨て（四捨五入だと、境目の手前でも「5.0m」と出てしまう）
+const tape = {
+  key: 'tape', name: 'ガムテープ', prompt: '貼れ！', hint: '引っぱって たんすに貼る', bg: '#eef0e2',
+  bgm: song(132, [
+    ['square', 0.045, '64 . . 67 . . 69 . 71 . . 69 . . 67 . 64 . . 67 . . 69 . 72 . 71 . 69 . . .'],
+    ['triangle', 0.13, '40 . . . 47 . . . 45 . . . 47 . . . 40 . . . 47 . . . 45 . . . 43 . . .']
+  ], ['k..sk.s.k..sk.sc']),
+  shop: [['ガムテープ', 'ガムテープ 布'], ['シールはがし', 'シールはがし スプレー']],
+  bill(t) { const n = t.tape || 0, b = t.tapeBuy || 0; return { v: tapeM(n), n: (b ? 'ガムテープとシールはがしの買い直し・' : '') + 'テープのあとをはがす', sec: Math.round(n * TAPE_SEC), yen: b * TAPE_YEN }; },
+  init() { this.n = 0; this.ptr = null; const g = this.geo(); this.ax = g.l; this.ay = g.t; this.cx = this.ax; this.cy = this.ay; this.ext = 0; this.strips = []; this.say = ''; this.sayT = 0; },
+  started() { return this.n > 0; },
+  result() { return tapeM(this.n); },
+  commit(tot) { add(tot, 'tape', this.n); add(tot, 'tapeBuy', this.n >= TAPE_BUY ? 1 : 0); mx(tot, 'tapeMax', this.n); },
+  geo() { const s = SC(); return { s, l: W * 0.18, r: W * 0.82, t: H * 0.24, b: H * 0.78 }; },
+  down(id, x, y) { if (this.ptr == null) { this.ptr = id; this.cx = x; this.cy = y; this.ext = Math.hypot(x - this.ax, y - this.ay); } }, // どこを押してもよい。テープのはしから指まで、テープがのびる
+  move(id, x, y) {
+    if (id !== this.ptr) return;
+    this.cx = x; this.cy = y;
+    const d = Math.hypot(x - this.ax, y - this.ay); if (d > this.ext + 25 * SC()) { this.ext = d; sfx.tapeout(); } // ビーッ
+  },
+  up(id) {
+    if (this.ptr == null || (id != null && id !== this.ptr)) return; this.ptr = null;
+    const s = SC(), d = Math.hypot(this.cx - this.ax, this.cy - this.ay);
+    if (id == null || d < TAPE_MIN * s) return;
+    this.strips.push({ ax: this.ax, ay: this.ay, bx: this.cx, by: this.cy }); if (this.strips.length > 60) this.strips.shift();
+    this.ax = this.cx; this.ay = this.cy; sfx.tapehit();
+    if (scoring()) { const before = this.n; this.n += d / (TAPE_PX * s); if (before < TAPE_BUY && this.n >= TAPE_BUY) { this.say = 'たんすが あかない…！'; this.sayT = 1; } else if (this.sayT <= 0) { this.say = 'ビーッ、ペタッ'; this.sayT = 0.35; } }
+  },
+  update(dt) { this.sayT = Math.max(0, this.sayT - dt); },
+  strip(ax, ay, bx, by, a) { // 1本のテープ（茶色。はしがギザギザ）
+    const s = SC(), d = Math.hypot(bx - ax, by - ay); if (d < 1) return;
+    ctx.save(); ctx.translate(ax, ay); ctx.rotate(Math.atan2(by - ay, bx - ax)); ctx.globalAlpha = a;
+    ctx.fillStyle = '#c99a5b'; ctx.fillRect(0, -11 * s, d, 22 * s);
+    ctx.strokeStyle = 'rgba(35,27,46,.55)'; ctx.lineWidth = 1.5; ctx.strokeRect(0, -11 * s, d, 22 * s);
+    ctx.strokeStyle = 'rgba(255,255,255,.25)'; ctx.beginPath(); ctx.moveTo(0, -5 * s); ctx.lineTo(d, -5 * s); ctx.stroke();
+    ctx.restore(); ctx.globalAlpha = 1;
+  },
+  draw() {
+    const g = this.geo(), s = g.s;
+    ctx.fillStyle = this.bg; ctx.fillRect(0, 0, W, H * 0.8);
+    ctx.fillStyle = '#c4b49a'; ctx.fillRect(0, H * 0.8, W, H * 0.2); ctx.fillStyle = INK; ctx.fillRect(0, H * 0.8 - 2, W, 3); // 床
+    // たんす（引き出し4段）
+    ctx.lineWidth = 3; ctx.strokeStyle = INK; rr(g.l, g.t, g.r - g.l, g.b - g.t, 6 * s); ctx.fillStyle = '#b07a48'; ctx.fill(); ctx.stroke();
+    const dh = (g.b - g.t - 24 * s) / 4;
+    for (let i = 0; i < 4; i++) { const y = g.t + 12 * s + i * dh; rr(g.l + 12 * s, y + 3 * s, g.r - g.l - 24 * s, dh - 6 * s, 4 * s); ctx.fillStyle = '#c48a55'; ctx.fill(); ctx.stroke(); for (const k of [0.3, 0.7]) { rr(g.l + (g.r - g.l) * k - 14 * s, y + dh / 2 - 4 * s, 28 * s, 8 * s, 4 * s); ctx.fillStyle = '#2b3039'; ctx.fill(); } }
+    rr(g.l + 10 * s, g.b, 24 * s, 14 * s, 3 * s); ctx.fillStyle = '#8a5a36'; ctx.fill(); ctx.stroke(); rr(g.r - 34 * s, g.b, 24 * s, 14 * s, 3 * s); ctx.fill(); ctx.stroke();
+    for (const t of this.strips) this.strip(t.ax, t.ay, t.bx, t.by, 0.92);
+    if (this.ptr != null) this.strip(this.ax, this.ay, this.cx, this.cy, 0.75); // 引っぱっているテープ
+    // テープの巻き（指の所、または はしの所）
+    const rx = this.ptr != null ? this.cx : this.ax, ry = this.ptr != null ? this.cy : this.ay;
+    ctx.lineWidth = 3; ctx.strokeStyle = INK; ctx.beginPath(); ctx.arc(rx, ry, 24 * s, 0, Math.PI * 2); ctx.fillStyle = '#c99a5b'; ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.arc(rx, ry, 13 * s, 0, Math.PI * 2); ctx.fillStyle = this.bg; ctx.fill(); ctx.stroke();
+    if (this.sayT > 0) bigText(this.say, W / 2, H * 0.14, Math.round(30 * s), HOT, PAPER, W * 0.9);
+  },
+  drawHint(t) { const g = this.geo(), p = (t * 1.1) % 1; finger(g.l + p * (g.r - g.l) * 0.8, g.t + p * (g.b - g.t) * 0.6, 0.9); }
+};
+
+/* ---------- 大盛り40: ペンのキャップ ---------- */
+const PEN_SET = 6;     // 1ケースの本数。全部抜くと、次のケース
+const PEN_GRAB = 110;  // キャップの真ん中から横にこの距離 px（SC()）までで、その段の高さなら、つまめる（ユーザーの指摘で広げた）
+const PEN_PULL = 40;   // つまんで右へこの長さ px（SC()）引っぱると、スポッと抜ける
+const PEN_DRY = 2;     // キャップを抜いてから、この秒数でペン先がかわいてカスカス（見た目だけ）
+const PEN_SEC = 30;    // 転がったキャップを探して、はめ直す（1本）
+const PEN_BUY = 6, PEN_YEN = 1000; // 1回でこの数以上抜いたら、かわいたペンの買い直し
+const PEN_COL = ['#e4574b', '#3a6fb0', '#3fae5a', '#2b3039', '#f28c38', '#8b5fbf', '#ff9fb2', '#3fb7c9'];
+const caps = {
+  key: 'caps', name: 'ペンのキャップ', prompt: '抜け！', hint: 'キャップを 右に引っぱって 抜く', bg: '#e6eef3',
+  bgm: song(140, [
+    ['pluck', 0.08, '76 . 74 . 72 . 74 . 76 . 79 . 76 . . . 74 . 72 . 71 . 72 . 74 . . . . . .'],
+    ['triangle', 0.13, '48 . . . 55 . . . 45 . . . 52 . . . 41 . . . 48 . . . 43 . . . 50 . . .']
+  ], ['k.h.s.hhk.h.s.h.']),
+  shop: [['水性ペン', '水性ペン セット'], ['ペンケース', 'ペンケース']],
+  bill(t) { const n = t.caps || 0, b = t.capsBuy || 0; return { v: n + '本', n: (b ? 'かわいたペンの買い直し・' : '') + 'キャップを探して はめ直す', sec: n * PEN_SEC, yen: b * PEN_YEN }; },
+  init() { this.n = 0; this.k = 0; this.pens = this.newSet(); this.ptr = {}; this.slide = 0; this.wait = 0; this.fly = []; this.say = ''; this.sayT = 0; },
+  started() { return this.n > 0; },
+  result() { return this.n + '本'; },
+  commit(tot) { add(tot, 'caps', this.n); add(tot, 'capsBuy', this.n >= PEN_BUY ? 1 : 0); mx(tot, 'capsMax', this.n); },
+  geo() { const s = SC(); return { s, l: W * 0.1, len: Math.min(W * 0.62, 250 * s), top: H * 0.3, gap: Math.min(H * 0.08, 62 * s), cap: Math.min(W * 0.2, 80 * s) }; },
+  newSet() { const a = []; for (let i = 0; i < PEN_SET; i++) a.push({ c: PEN_COL[(this.k + i) % PEN_COL.length], off: false, pull: 0, dry: 0 }); this.k += PEN_SET; return a; },
+  capXY(i) { const g = this.geo(), p = this.pens[i]; return { x: g.l + g.len + g.cap / 2 - 6 * g.s + p.pull, y: g.top + i * g.gap }; },
+  down(id, x, y) {
+    if (this.slide > 0) return;
+    const r = PEN_GRAB * SC(); let best = -1, bd = r;
+    this.pens.forEach((p, i) => { if (p.off || Object.values(this.ptr).some(q => q.i === i)) return; const c = this.capXY(i), d = Math.abs(x - c.x); if (Math.abs(y - c.y) < this.geo().gap / 2 && d < bd) { bd = d; best = i; } });
+    if (best >= 0) this.ptr[id] = { i: best, x0: x };
+  },
+  move(id, x) {
+    const q = this.ptr[id]; if (!q) return; const p = this.pens[q.i];
+    p.pull = clamp(x - q.x0, 0, PEN_PULL * SC());
+    if (x - q.x0 >= PEN_PULL * SC()) { delete this.ptr[id]; this.pop(q.i); }
+  },
+  up(id) { if (id == null) { for (const q of Object.values(this.ptr)) this.pens[q.i].pull = 0; this.ptr = {}; return; } const q = this.ptr[id]; if (q) { this.pens[q.i].pull = 0; delete this.ptr[id]; } },
+  pop(i) { // スポッ。キャップは右へ転がっていく
+    const s = SC(), c = this.capXY(i), p = this.pens[i];
+    p.off = true; p.pull = 0;
+    this.fly.push({ x: c.x, y: c.y, vx: rnd(260, 420) * s, vy: rnd(-60, 60) * s, r: 0, vr: rnd(6, 12), c: p.c });
+    sfx.pon();
+    if (scoring()) { this.n++; if (this.n === PEN_BUY) { this.say = 'ペンが かわいた…！'; this.sayT = 1; } else if (this.sayT <= 0) { this.say = 'スポッ'; this.sayT = 0.3; } }
+    if (this.pens.every(p => p.off)) this.wait = 0.25;
+  },
+  update(dt) {
+    this.sayT = Math.max(0, this.sayT - dt);
+    for (const p of this.pens) if (p.off) p.dry = Math.min(1, p.dry + dt / PEN_DRY);
+    if (this.wait > 0) { this.wait -= dt; if (this.wait <= 0) { this.slide = 1; this.pens = this.newSet(); this.ptr = {}; } }
+    if (this.slide > 0) this.slide = Math.max(0, this.slide - dt / 0.3);
+    for (const f of this.fly) { f.x += f.vx * dt; f.y += f.vy * dt; f.r += f.vr * dt; f.vx *= Math.exp(-dt * 0.6); }
+    for (let i = this.fly.length - 1; i >= 0; i--) if (this.fly[i].x > W + 60) this.fly.splice(i, 1);
+  },
+  capShape(x, y, c, rot) { // キャップ（クリップつき）
+    const g = this.geo(), s = g.s, w = g.cap, h = 22 * s;
+    ctx.save(); ctx.translate(x, y); ctx.rotate(rot || 0); ctx.lineWidth = 3; ctx.strokeStyle = INK;
+    rr(-w / 2, -h / 2, w, h, 8 * s); ctx.fillStyle = c; ctx.fill(); ctx.stroke();
+    rr(-w / 2 + 8 * s, -h / 2 - 6 * s, w * 0.6, 6 * s, 3 * s); ctx.fillStyle = '#c4ccd6'; ctx.fill(); ctx.stroke(); // クリップ
+    ctx.restore();
+  },
+  draw() {
+    const g = this.geo(), s = g.s, off = -this.slide * W;
+    ctx.fillStyle = this.bg; ctx.fillRect(0, 0, W, H * 0.2);
+    ctx.fillStyle = '#d9b48a'; ctx.fillRect(0, H * 0.2, W, H * 0.8); ctx.fillStyle = INK; ctx.fillRect(0, H * 0.2 - 2, W, 3); // 机
+    ctx.fillStyle = INK; ctx.font = `${Math.round(14 * s)}px ${DISPLAY}`; ctx.textAlign = 'right'; ctx.fillText('あしたの しゅくだい：色ぬり', W - 12 * s, H * 0.17); ctx.textAlign = 'left';
+    // ペンケース
+    ctx.lineWidth = 3; ctx.strokeStyle = INK; rr(g.l - 14 * s + off, g.top - g.gap * 0.6, g.len + g.cap + 28 * s, g.gap * PEN_SET + 4 * s, 12 * s); ctx.fillStyle = '#f4f6f8'; ctx.fill(); ctx.stroke();
+    this.pens.forEach((p, i) => {
+      const y = g.top + i * g.gap, x = g.l + off, h = 18 * s;
+      rr(x, y - h / 2, g.len, h, 6 * s); ctx.fillStyle = '#ffffff'; ctx.fill(); ctx.stroke(); // 軸
+      ctx.fillStyle = p.c; ctx.fillRect(x + g.len * 0.1, y - h / 2 + 3 * s, g.len * 0.4, h - 6 * s); // 色の帯
+      if (p.off) { // ペン先（かわくとカスカス）
+        ctx.beginPath(); ctx.moveTo(x + g.len, y - 6 * s); ctx.lineTo(x + g.len + 16 * s, y); ctx.lineTo(x + g.len, y + 6 * s); ctx.closePath();
+        ctx.globalAlpha = 1 - p.dry * 0.75; ctx.fillStyle = p.c; ctx.fill(); ctx.globalAlpha = 1; ctx.lineWidth = 2; ctx.stroke(); ctx.lineWidth = 3;
+        if (p.dry >= 1) { ctx.fillStyle = 'rgba(35,27,46,.6)'; ctx.font = `${Math.round(11 * s)}px ${DISPLAY}`; ctx.fillText('カスカス', x + g.len + 20 * s, y + 4 * s); }
+      } else this.capShape(this.capXY(i).x + off, y, p.c, 0);
+    });
+    for (const f of this.fly) this.capShape(f.x, f.y, f.c, f.r);
+    if (this.sayT > 0) bigText(this.say, W / 2, H * 0.84, Math.round(30 * s), HOT, PAPER, W * 0.9);
+  },
+  drawHint(t) { const g = this.geo(), p = (t * 1.3) % 1, c = this.capXY(0); finger(c.x + p * 50 * g.s, c.y + 10 * g.s, 0.9); }
+};
+
+STAGE_LIST.push(detergent, socks, crayon, tape, caps);
+ZUKAN_EXTRA.push(
+  { id: 'detergent', name: '泡の海', desc: '洗剤を1回で550mL 入れる', ok: t => (t.detergentMax || 0) >= 550 },
+  { id: 'socks', name: '靴下ミステリー', desc: '靴下を1回で10足 かたほうにする', ok: t => (t.socksMax || 0) >= 10 },
+  { id: 'crayon', name: '虹のかけら', desc: 'クレヨンを1回で70本 折る', ok: t => (t.crayonMax || 0) >= 70 },
+  { id: 'tape', name: '開かずのたんす', desc: 'ガムテープを1回で17m 貼る', ok: t => (t.tapeMax || 0) >= 17 },
+  { id: 'caps', name: 'キャップ迷子', desc: 'ペンのキャップを1回で8本 抜く', ok: t => (t.capsMax || 0) >= 8 }
+);

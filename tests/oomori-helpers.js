@@ -12,11 +12,11 @@ const OLD_PAGE = fileUrl(path.join(ROOT, 'index.html'));
 const SITE = 'https://sakuichi.github.io/itazu-rush/';
 const OOMORI_SITE = SITE + 'oomori/';
 
-// 既存10種＋新規35種（第1弾5種・第2弾5種・第3弾5種・第4弾5種・第5弾5種・第6弾5種・第7弾5種。この順で #chips に並ぶ）
+// 既存10種＋新規40種（第1弾5種・第2弾5種・第3弾5種・第4弾5種・第5弾5種・第6弾5種・第7弾5種・第8弾5種。この順で #chips に並ぶ）
 const OLD_KEYS = ['tissue', 'toilet', 'shoji', 'paste', 'shampoo', 'mud', 'toys', 'puddle', 'hose', 'elev'];
-const NEW_KEYS = ['graffiti', 'soda', 'pudding', 'sticker', 'shoe', 'calendar', 'vacuum', 'futon', 'news', 'bubble', 'piano', 'pillow', 'sofa', 'light', 'yarn', 'closet', 'roll', 'balloon', 'clock', 'hanko', 'gift', 'cake', 'bath', 'peel', 'laces', 'umbrella', 'keyboard', 'tabletop', 'cards', 'glue', 'chair', 'hashi', 'aircon', 'ice', 'lids'];
+const NEW_KEYS = ['graffiti', 'soda', 'pudding', 'sticker', 'shoe', 'calendar', 'vacuum', 'futon', 'news', 'bubble', 'piano', 'pillow', 'sofa', 'light', 'yarn', 'closet', 'roll', 'balloon', 'clock', 'hanko', 'gift', 'cake', 'bath', 'peel', 'laces', 'umbrella', 'keyboard', 'tabletop', 'cards', 'glue', 'chair', 'hashi', 'aircon', 'ice', 'lids', 'detergent', 'socks', 'crayon', 'tape', 'caps'];
 const KEYS = OLD_KEYS.concat(NEW_KEYS);
-const NEW_NAMES = { graffiti: '落書き', soda: '炭酸', pudding: 'プリン', sticker: 'シール', shoe: '靴飛ばし', calendar: 'カレンダー', vacuum: '掃除機', futon: '布団', news: '新聞', bubble: 'シャボン玉', piano: 'ピアノ', pillow: '枕', sofa: 'ソファ', light: '電気のスイッチ', yarn: '毛糸玉', closet: '押し入れ', roll: 'ロールスクリーン', balloon: '風船', clock: '時計', hanko: 'ハンコ', gift: '菓子折り', cake: 'ケーキのいちご', bath: '入浴剤', peel: '壁紙', laces: '靴ひも', umbrella: '傘', keyboard: 'キーボード', tabletop: 'テーブルの物', cards: 'トランプ', glue: 'スティックのり', chair: 'パパのいす', hashi: '割り箸', aircon: 'エアコン', ice: '製氷皿の氷', lids: '鍋のふた' };
+const NEW_NAMES = { graffiti: '落書き', soda: '炭酸', pudding: 'プリン', sticker: 'シール', shoe: '靴飛ばし', calendar: 'カレンダー', vacuum: '掃除機', futon: '布団', news: '新聞', bubble: 'シャボン玉', piano: 'ピアノ', pillow: '枕', sofa: 'ソファ', light: '電気のスイッチ', yarn: '毛糸玉', closet: '押し入れ', roll: 'ロールスクリーン', balloon: '風船', clock: '時計', hanko: 'ハンコ', gift: '菓子折り', cake: 'ケーキのいちご', bath: '入浴剤', peel: '壁紙', laces: '靴ひも', umbrella: '傘', keyboard: 'キーボード', tabletop: 'テーブルの物', cards: 'トランプ', glue: 'スティックのり', chair: 'パパのいす', hashi: '割り箸', aircon: 'エアコン', ice: '製氷皿の氷', lids: '鍋のふた', detergent: '洗剤', socks: '靴下', crayon: 'クレヨン', tape: 'ガムテープ', caps: 'ペンのキャップ' };
 
 // ページを開く（既存版の helpers.open と同じ形）。errors にはページ内のエラーがたまる
 async function openPage(browser, url, { query = '', width = 390, height = 844 } = {}) {
@@ -248,6 +248,37 @@ const NEW_ACTS = {
     await m.move(W * 0.3, H * 0.6); await m.down();
     for (let i = 0; i < 8; i++) await m.move(i % 2 ? W * 0.3 : W * 0.7, H * 0.6, { steps: 4 });
     await m.up();
+  },
+  // 押したまま、ゆれる洗濯機の口を追いかけて注ぐ
+  async detergent(p, W, H) {
+    const m = p.mouse;
+    await m.move(W / 2, H * 0.4); await m.down();
+    for (let i = 0; i < 40; i++) { const x = await p.evaluate(() => window.__itazu.st.geo().mx); await m.move(x, H * 0.4, { steps: 2 }); await sleep(40); }
+    await m.up();
+  },
+  // かごの靴下のかたほうをつまんで、遠くへ離す×6
+  async socks(p, W, H) {
+    const m = p.mouse;
+    for (let i = 0; i < 6; i++) { await sleep(220); const c = await p.evaluate(() => window.__itazu.st.sockXY(0)); await m.move(c.x, c.y); await m.down(); await m.move(c.x - 40, c.y - 150, { steps: 4 }); await m.up(); }
+  },
+  // 箱のクレヨンの上を、横になぞる×3（全部折ると次の箱）
+  async crayon(p, W, H) {
+    const m = p.mouse, g = await p.evaluate(() => { const g = window.__itazu.st.geo(); return { l: g.l, w: g.w, y: g.top + g.len * 0.3 }; });
+    for (let i = 0; i < 3; i++) { await m.move(g.l - 10, g.y); await m.down(); await m.move(g.l + g.w + 10, g.y, { steps: 10 }); await m.up(); await sleep(650); }
+  },
+  // 真ん中を押して、たんすの上をあちこちへ引っぱって貼る×6
+  async tape(p, W, H) {
+    const m = p.mouse, pts = [[0.8, 0.4], [0.2, 0.5], [0.8, 0.6], [0.2, 0.7], [0.8, 0.3], [0.2, 0.35]];
+    for (const [x, y] of pts) { await m.move(W * 0.5, H * 0.5); await m.down(); await m.move(W * x, H * y, { steps: 6 }); await m.up(); await sleep(80); }
+  },
+  // 残っているキャップを、上から順につまんで右へ引っぱる×9
+  async caps(p, W, H) {
+    const m = p.mouse;
+    for (let i = 0; i < 9; i++) {
+      const c = await p.evaluate(() => { const st = window.__itazu.st, i = st.pens.findIndex(q => !q.off); return st.slide > 0 || i < 0 ? null : st.capXY(i); });
+      if (!c) { await sleep(300); continue; }
+      await m.move(c.x, c.y); await m.down(); await m.move(c.x + 60, c.y, { steps: 4 }); await m.up(); await sleep(60);
+    }
   }
 };
 const OACTS = Object.assign({}, ACTS, NEW_ACTS);
