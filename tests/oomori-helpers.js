@@ -12,11 +12,11 @@ const OLD_PAGE = fileUrl(path.join(ROOT, 'index.html'));
 const SITE = 'https://sakuichi.github.io/itazu-rush/';
 const OOMORI_SITE = SITE + 'oomori/';
 
-// 既存10種＋新規40種（第1弾5種・第2弾5種・第3弾5種・第4弾5種・第5弾5種・第6弾5種・第7弾5種・第8弾5種。この順で #chips に並ぶ）
+// 既存10種＋新規45種（第1弾5種・第2弾5種・第3弾5種・第4弾5種・第5弾5種・第6弾5種・第7弾5種・第8弾5種・第9弾5種。この順で #chips に並ぶ）
 const OLD_KEYS = ['tissue', 'toilet', 'shoji', 'paste', 'shampoo', 'mud', 'toys', 'puddle', 'hose', 'elev'];
-const NEW_KEYS = ['graffiti', 'soda', 'pudding', 'sticker', 'shoe', 'calendar', 'vacuum', 'futon', 'news', 'bubble', 'piano', 'pillow', 'sofa', 'light', 'yarn', 'closet', 'roll', 'balloon', 'clock', 'hanko', 'gift', 'cake', 'bath', 'peel', 'laces', 'umbrella', 'keyboard', 'tabletop', 'cards', 'glue', 'chair', 'hashi', 'aircon', 'ice', 'lids', 'detergent', 'socks', 'crayon', 'tape', 'caps'];
+const NEW_KEYS = ['graffiti', 'soda', 'pudding', 'sticker', 'shoe', 'calendar', 'vacuum', 'futon', 'news', 'bubble', 'piano', 'pillow', 'sofa', 'light', 'yarn', 'closet', 'roll', 'balloon', 'clock', 'hanko', 'gift', 'cake', 'bath', 'peel', 'laces', 'umbrella', 'keyboard', 'tabletop', 'cards', 'glue', 'chair', 'hashi', 'aircon', 'ice', 'lids', 'detergent', 'socks', 'crayon', 'tape', 'caps', 'slippers', 'hangers', 'stapler', 'buttons', 'inside'];
 const KEYS = OLD_KEYS.concat(NEW_KEYS);
-const NEW_NAMES = { graffiti: '落書き', soda: '炭酸', pudding: 'プリン', sticker: 'シール', shoe: '靴飛ばし', calendar: 'カレンダー', vacuum: '掃除機', futon: '布団', news: '新聞', bubble: 'シャボン玉', piano: 'ピアノ', pillow: '枕', sofa: 'ソファ', light: '電気のスイッチ', yarn: '毛糸玉', closet: '押し入れ', roll: 'ロールスクリーン', balloon: '風船', clock: '時計', hanko: 'ハンコ', gift: '菓子折り', cake: 'ケーキのいちご', bath: '入浴剤', peel: '壁紙', laces: '靴ひも', umbrella: '傘', keyboard: 'キーボード', tabletop: 'テーブルの物', cards: 'トランプ', glue: 'スティックのり', chair: 'パパのいす', hashi: '割り箸', aircon: 'エアコン', ice: '製氷皿の氷', lids: '鍋のふた', detergent: '洗剤', socks: '靴下', crayon: 'クレヨン', tape: 'ガムテープ', caps: 'ペンのキャップ' };
+const NEW_NAMES = { graffiti: '落書き', soda: '炭酸', pudding: 'プリン', sticker: 'シール', shoe: '靴飛ばし', calendar: 'カレンダー', vacuum: '掃除機', futon: '布団', news: '新聞', bubble: 'シャボン玉', piano: 'ピアノ', pillow: '枕', sofa: 'ソファ', light: '電気のスイッチ', yarn: '毛糸玉', closet: '押し入れ', roll: 'ロールスクリーン', balloon: '風船', clock: '時計', hanko: 'ハンコ', gift: '菓子折り', cake: 'ケーキのいちご', bath: '入浴剤', peel: '壁紙', laces: '靴ひも', umbrella: '傘', keyboard: 'キーボード', tabletop: 'テーブルの物', cards: 'トランプ', glue: 'スティックのり', chair: 'パパのいす', hashi: '割り箸', aircon: 'エアコン', ice: '製氷皿の氷', lids: '鍋のふた', detergent: '洗剤', socks: '靴下', crayon: 'クレヨン', tape: 'ガムテープ', caps: 'ペンのキャップ', slippers: 'スリッパ', hangers: 'ハンガー', stapler: 'ホチキス', buttons: 'シャツのボタン', inside: '洗濯物のシャツ' };
 
 // ページを開く（既存版の helpers.open と同じ形）。errors にはページ内のエラーがたまる
 async function openPage(browser, url, { query = '', width = 390, height = 844 } = {}) {
@@ -278,6 +278,46 @@ const NEW_ACTS = {
       const c = await p.evaluate(() => { const st = window.__itazu.st, i = st.pens.findIndex(q => !q.off); return st.slide > 0 || i < 0 ? null : st.capXY(i); });
       if (!c) { await sleep(300); continue; }
       await m.move(c.x, c.y); await m.down(); await m.move(c.x + 60, c.y, { steps: 4 }); await m.up(); await sleep(60);
+    }
+  },
+  // 表のスリッパを、近いものから横にはじく×10（全部裏返すと次のスリッパ）
+  async slippers(p, W, H) {
+    const m = p.mouse;
+    for (let i = 0; i < 10; i++) {
+      const q = await p.evaluate(() => { const st = window.__itazu.st, i = st.sl.findIndex(x => !x.flip); return st.slide > 0 || i < 0 ? null : st.pos(i); });
+      if (!q) { await sleep(250); continue; }
+      await m.move(q.x, q.y); await m.down(); await m.move(q.x + 50, q.y, { steps: 3 }); await m.up(); await sleep(40);
+    }
+  },
+  // 左で押したまま、右へ・左へと往復×6（右へ引っぱるたびに1本つながる）
+  async hangers(p, W, H) {
+    const m = p.mouse;
+    await m.move(W * 0.2, H * 0.4); await m.down();
+    for (let i = 0; i < 6; i++) { await m.move(W * 0.75, H * 0.4, { steps: 4 }); await m.move(W * 0.2, H * 0.4, { steps: 4 }); }
+    await m.up();
+  },
+  // 押したまま、上下に押しこむ×14
+  async stapler(p, W, H) {
+    const m = p.mouse;
+    await m.move(W * 0.5, H * 0.3); await m.down();
+    for (let i = 0; i < 14; i++) { await m.move(W * 0.5, H * 0.3 + 60, { steps: 2 }); await m.move(W * 0.5, H * 0.3, { steps: 2 }); await sleep(30); }
+    await m.up();
+  },
+  // まだとめていないボタンを、右（少し下）へ引っぱる×8
+  async buttons(p, W, H) {
+    const m = p.mouse;
+    for (let k = 0; k < 8; k++) {
+      const t = await p.evaluate(() => { const st = window.__itazu.st; if (st.slide > 0 || st.wait > 0) return null; const i = st.btn.findIndex(b => b.hole < 0); return i < 0 ? null : st.btnXY(i); });
+      if (!t) { await sleep(300); continue; }
+      await m.move(t.x, t.y); await m.down(); await m.move(t.x + 70, t.y + 40, { steps: 4 }); await m.up(); await sleep(40);
+    }
+  },
+  // Tシャツのすそをつまんで、上へめくる×6
+  async inside(p, W, H) {
+    const m = p.mouse;
+    for (let i = 0; i < 6; i++) {
+      const g = await p.evaluate(() => { const g = window.__itazu.st.geo(); return { x: g.cx, y: g.cy + g.h * 0.3 }; });
+      await m.move(g.x, g.y); await m.down(); await m.move(g.x, g.y - 120, { steps: 4 }); await m.up(); await sleep(300);
     }
   }
 };

@@ -3533,3 +3533,380 @@ ZUKAN_EXTRA.push(
   { id: 'tape', name: '開かずのたんす', desc: 'ガムテープを1回で17m 貼る', ok: t => (t.tapeMax || 0) >= 17 },
   { id: 'caps', name: 'キャップ迷子', desc: 'ペンのキャップを1回で8本 抜く', ok: t => (t.capsMax || 0) >= 8 }
 );
+
+/* ===== 第9弾（2026-10-31 追加） ===== */
+Object.assign(sfx, {
+  pata() { noise(0.07, 700, 0.8, 0.3, 'lowpass'); tone(160, 90, 0.06, 0.12, 'sine'); },
+  gachan() { noise(0.09, 2200, 1.2, 0.3); tone(900, 300, 0.05, 0.12, 'square'); noise(0.06, 400, 0.8, 0.25, 'lowpass', 0.03); },
+  pochi() { tone(1400, 1000, 0.04, 0.12, 'sine'); }
+});
+
+/* ---------- 大盛り41: スリッパ ---------- */
+const SLIP_GRAB = 55;  // スリッパの真ん中からこの距離 px（SC()）までなら、はじける
+const SLIP_FLICK = 30; // つまんだ所から横にこの長さ px（SC()）動かすと、くるっと裏返る
+const SLIP_ROW = 4, SLIP_LINE = 2; // 並べてあるスリッパ（1列4枚＝2足×2列で8枚）。全部裏返すと、次のスリッパ。SLIP_ROW は偶数にする（となり同士で1足）
+const SLIP_SEC = 30;   // 表にもどして、中のほこりをはたく（1枚）
+const SLIP_BUY = 5, SLIP_YEN = 1000; // 1回でこの数以上裏返したら、中がほこりだらけで、お客さん用スリッパの買い直し
+const SLIP_COL = ['#e4574b', '#3a6fb0', '#3fae5a', '#f2a33a', '#8b5fbf', '#ff9fb2'];
+const slippers = {
+  key: 'slippers', name: 'スリッパ', prompt: '裏返せ！', hint: 'スリッパを 横にはじいて 裏返す', bg: '#efe3cf',
+  bgm: song(140, [
+    ['pluck', 0.08, '72 . 69 . 72 . 76 . 74 . 71 . 67 . . . 69 . 72 . 74 . 76 . 72 . . . . . .'],
+    ['triangle', 0.13, '45 . . . 52 . . . 43 . . . 50 . . . 41 . . . 48 . . . 43 . . . 50 . . .']
+  ], ['k.h.s.hhk.h.s.h.']),
+  shop: [['スリッパ', 'スリッパ 来客用 セット'], ['スリッパラック', 'スリッパラック']],
+  bill(t) { const n = t.slippers || 0, b = t.slippersBuy || 0; return { v: n + '枚', n: (b ? 'お客さん用スリッパの買い直し・' : '') + '表にもどして ほこりをはたく', sec: n * SLIP_SEC, yen: b * SLIP_YEN }; },
+  init() { this.n = 0; this.k = 0; this.sl = this.newSet(); this.ptr = {}; this.slide = 0; this.wait = 0; this.say = ''; this.sayT = 0; },
+  started() { return this.n > 0; },
+  result() { return this.n + '枚'; },
+  commit(tot) { add(tot, 'slippers', this.n); add(tot, 'slippersBuy', this.n >= SLIP_BUY ? 1 : 0); mx(tot, 'slippersMax', this.n); },
+  geo() { const s = SC(), w = Math.min(W * 0.15, 60 * s); return { s, w, h: w * 1.75, l: W * 0.12, r: W * 0.88, top: H * 0.5, step: H * 0.24 }; }, // top：1列目の高さ、step：列の間
+  newSet() { const a = []; for (let i = 0; i < SLIP_ROW * SLIP_LINE; i++) a.push({ c: SLIP_COL[(this.k + Math.floor(i / 2)) % SLIP_COL.length], flip: false, t: 1, dir: 1 }); this.k += SLIP_ROW * SLIP_LINE / 2; return a; }, // となり同士が1足（左右）
+  pos(i) { const g = this.geo(), row = Math.floor(i / SLIP_ROW), c = i % SLIP_ROW; // 1足は、となり同士で少し寄せる
+    return { x: g.l + (g.r - g.l) * (c + 0.5) / SLIP_ROW + (c % 2 ? -8 : 8) * g.s, y: g.top + row * g.step }; },
+  down(id, x, y) {
+    if (this.slide > 0) return;
+    const r = SLIP_GRAB * SC(); let best = -1, bd = r;
+    this.sl.forEach((p, i) => { if (p.flip) return; const q = this.pos(i), d = Math.hypot(x - q.x, y - q.y); if (d < bd) { bd = d; best = i; } });
+    if (best >= 0) this.ptr[id] = { i: best, x0: x };
+  },
+  move(id, x) { const q = this.ptr[id]; if (!q) return; const dx = x - q.x0; if (Math.abs(dx) >= SLIP_FLICK * SC()) { delete this.ptr[id]; this.flip(q.i, Math.sign(dx)); } },
+  up(id) { if (id == null) this.ptr = {}; else delete this.ptr[id]; },
+  flip(i, dir) { // くるっ。裏が上になる
+    const p = this.sl[i]; if (p.flip) return;
+    p.flip = true; p.t = 0; p.dir = dir; sfx.pata();
+    if (scoring()) { this.n++; if (this.n === SLIP_BUY) { this.say = 'お客さんが 来ちゃう…！'; this.sayT = 1; } else if (this.sayT <= 0) { this.say = 'ペタッ'; this.sayT = 0.25; } }
+    if (this.sl.every(p => p.flip)) this.wait = 0.3;
+  },
+  update(dt) {
+    this.sayT = Math.max(0, this.sayT - dt);
+    for (const p of this.sl) p.t = Math.min(1, p.t + dt / 0.18);
+    if (this.wait > 0) { this.wait -= dt; if (this.wait <= 0) { this.slide = 1; this.sl = this.newSet(); this.ptr = {}; } }
+    if (this.slide > 0) this.slide = Math.max(0, this.slide - dt / 0.3);
+  },
+  slipper(x, y, p, mirror) { // 上から見たスリッパ。裏返すと、靴底が見える
+    const g = this.geo(), s = g.s, w = g.w, h = g.h, sc = Math.cos(p.t * Math.PI), sole = p.flip ? p.t >= 0.5 : false;
+    ctx.save(); ctx.translate(x, y); ctx.scale((mirror ? -1 : 1) * Math.max(0.05, Math.abs(p.flip ? sc : 1)), 1); ctx.lineWidth = 3; ctx.strokeStyle = INK;
+    rr(-w / 2, -h / 2, w, h, w * 0.48); ctx.fillStyle = sole ? '#7a6a5a' : '#f6efe2'; ctx.fill(); ctx.stroke();
+    if (sole) { ctx.strokeStyle = 'rgba(35,27,46,.45)'; ctx.lineWidth = 2; for (let k = 1; k < 7; k++) { const yy = -h / 2 + h * k / 7; ctx.beginPath(); ctx.moveTo(-w * 0.36, yy); ctx.lineTo(w * 0.36, yy); ctx.stroke(); } } // 靴底のみぞ
+    else { rr(-w / 2 - 2 * s, -h / 2 + h * 0.06, w + 4 * s, h * 0.38, w * 0.3); ctx.fillStyle = p.c; ctx.fill(); ctx.stroke(); } // つま先のバンド
+    ctx.restore();
+  },
+  draw() {
+    const g = this.geo(), s = g.s, off = this.slide * W;
+    ctx.fillStyle = this.bg; ctx.fillRect(0, 0, W, H * 0.32);
+    ctx.fillStyle = '#c99a63'; ctx.fillRect(0, H * 0.32, W, H * 0.68); ctx.fillStyle = INK; ctx.fillRect(0, H * 0.32 - 2, W, 3); // 玄関の床（上がりかまち）
+    ctx.strokeStyle = 'rgba(120,70,30,.3)'; ctx.lineWidth = 2; for (let y = H * 0.32 + 50 * s; y < H; y += 60 * s) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+    // 玄関のドアと「きょう お客さんが来ます」のメモ
+    ctx.lineWidth = 3; ctx.strokeStyle = INK; rr(W * 0.62, H * 0.06, W * 0.3, H * 0.26, 4 * s); ctx.fillStyle = '#8a5a36'; ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.arc(W * 0.66, H * 0.2, 5 * s, 0, Math.PI * 2); ctx.fillStyle = '#ffd23f'; ctx.fill(); ctx.stroke();
+    rr(W * 0.08, H * 0.14, W * 0.42, H * 0.1, 6 * s); ctx.fillStyle = PAPER; ctx.fill(); ctx.stroke();
+    ctx.fillStyle = INK; ctx.font = `${Math.round(13 * s)}px ${DISPLAY}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('きょう お客さんが来ます', W * 0.29, H * 0.19, W * 0.38); ctx.textAlign = 'left';
+    this.sl.forEach((p, i) => { const q = this.pos(i); this.slipper(q.x + off, q.y, p, i % 2 === 1); });
+    if (this.sayT > 0) bigText(this.say, W / 2, H * 0.38, Math.round(30 * s), HOT, PAPER, W * 0.9);
+  },
+  drawHint(t) { const q = this.pos(0), p = (t * 1.5) % 1; finger(q.x - 20 * SC() + p * 60 * SC(), q.y + 10 * SC(), 0.9); }
+};
+
+/* ---------- 大盛り42: ハンガー ---------- */
+const HANG_LINE = 0.45; // 左（画面の幅のこの割合より左）でつまんで、この線より右へ引っぱると、鎖の下へ飛んでいって引っかかる。左へもどすと、また次のハンガーをつまむ（ユーザーの指摘で、鎖の下までねらって運ぶ形から変えた）
+const HANG_SEC = 30;   // 外して、クローゼットにかけ直す（1本）
+const HANG_BUY = 5, HANG_YEN = 1000; // 1回でこの数以上つなげたら、曲がったハンガーの買い直し
+const hangers = {
+  key: 'hangers', name: 'ハンガー', prompt: 'つなげろ！', hint: 'ハンガーを 右へ引っぱって つなげる', bg: '#e7e1f0',
+  bgm: song(132, [
+    ['bell', 0.05, '76 . . 79 . . 81 . 79 . 76 . 74 . . . 72 . . 74 . . 76 . 79 . 76 . . . . .'],
+    ['triangle', 0.13, '48 . . . 55 . . . 45 . . . 52 . . . 41 . . . 48 . . . 43 . . . 50 . . .']
+  ], ['k..hs.h.k.hhs..h']),
+  shop: [['ハンガー', 'ハンガー まとめ買い'], ['すべらないハンガー', 'ハンガー すべらない']],
+  bill(t) { const n = t.hangers || 0, b = t.hangersBuy || 0; return { v: n + '本', n: (b ? '曲がったハンガーの買い直し・' : '') + '外して かけ直す', sec: n * HANG_SEC, yen: b * HANG_YEN }; },
+  init() { this.n = 0; this.links = 0; this.ptr = null; this.back = []; this.fly = []; this.say = ''; this.sayT = 0; },
+  started() { return this.n > 0; },
+  result() { return this.n + '本'; },
+  commit(tot) { add(tot, 'hangers', this.n); add(tot, 'hangersBuy', this.n >= HANG_BUY ? 1 : 0); mx(tot, 'hangersMax', this.n); },
+  geo() { const s = SC(); return { s, rod: H * 0.16, cx: W * 0.66, L: 40 * s, floor: H * 0.88, line: W * HANG_LINE }; },
+  hookAt(k) { // k 本目のハンガーのフックの位置（0本目はポール）。床に届いたら、床に積もっていく
+    const g = this.geo(), y = g.rod + k * g.L;
+    if (y <= g.floor - 30 * g.s) return { x: g.cx + Math.sin(clock * 2 + k * 0.4) * k * 0.5 * g.s, y, lie: false };
+    const e = k - Math.floor((g.floor - 30 * g.s - g.rod) / g.L) - 1;
+    return { x: g.cx + ((e % 5) - 2) * 26 * g.s, y: g.floor - 14 * g.s - Math.floor(e / 5) * 9 * g.s, lie: true };
+  },
+  down(id, x, y) { if (this.ptr == null) this.ptr = { id, x, y, hold: x < this.geo().line }; }, // 左なら、どこを押してもハンガーをつまむ
+  move(id, x, y) {
+    const p = this.ptr; if (!p || p.id !== id) return; p.x = x; p.y = y;
+    const g = this.geo();
+    if (!p.hold && x < g.line) p.hold = true; // 左へもどすと、次のハンガーをつまむ
+    if (p.hold && x >= g.line) { p.hold = false; this.hook(x, y); }
+  },
+  up(id) {
+    const p = this.ptr; if (!p || (id != null && p.id !== id)) return; this.ptr = null;
+    if (p.hold) this.back.push({ x: p.x, y: p.y, t: 0 }); // 右へ引っぱらずに離したら、ポールへもどる
+  },
+  hook(x, y) { // 鎖のいちばん下へ飛んでいって、カチャッ
+    const end = this.hookAt(this.links);
+    this.fly.push({ x, y, tx: end.x, ty: end.y, t: 0 }); this.links++; sfx.clink();
+    if (scoring()) { this.n++; if (this.n === HANG_BUY) { this.say = 'ハンガーが 曲がった…！'; this.sayT = 1; } else if (this.sayT <= 0) { this.say = 'カチャッ'; this.sayT = 0.3; } }
+  },
+  update(dt) {
+    this.sayT = Math.max(0, this.sayT - dt);
+    for (const b of this.back) b.t = Math.min(1, b.t + dt / 0.25);
+    for (let i = this.back.length - 1; i >= 0; i--) if (this.back[i].t >= 1) this.back.splice(i, 1);
+    for (const f of this.fly) f.t = Math.min(1, f.t + dt / 0.15);
+    for (let i = this.fly.length - 1; i >= 0; i--) if (this.fly[i].t >= 1) this.fly.splice(i, 1);
+  },
+  hanger(x, y, rot, a) { // ハンガー1本（フックのてっぺんが x, y）
+    const s = SC();
+    ctx.save(); ctx.translate(x, y); ctx.rotate(rot || 0); ctx.globalAlpha = a == null ? 1 : a; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    for (const [lw, col] of [[7 * s, INK], [3.5 * s, '#c4ccd6']]) {
+      ctx.lineWidth = lw; ctx.strokeStyle = col; ctx.beginPath();
+      ctx.arc(0, 5 * s, 5 * s, -Math.PI, 0.6 * Math.PI, false); // フック
+      ctx.moveTo(0, 10 * s); ctx.lineTo(-24 * s, 32 * s); ctx.lineTo(24 * s, 32 * s); ctx.lineTo(0, 10 * s); ctx.stroke();
+    }
+    ctx.restore(); ctx.lineCap = 'butt'; ctx.lineJoin = 'miter'; ctx.globalAlpha = 1;
+  },
+  draw() {
+    const g = this.geo(), s = g.s;
+    ctx.fillStyle = this.bg; ctx.fillRect(0, 0, W, g.floor);
+    ctx.fillStyle = '#c9a77a'; ctx.fillRect(0, g.floor, W, H - g.floor); ctx.fillStyle = INK; ctx.fillRect(0, g.floor - 2, W, 3); // 床
+    // クローゼット（ポールと、かかっている服）
+    ctx.lineWidth = 3; ctx.strokeStyle = INK; ctx.fillStyle = '#d8cce6'; ctx.fillRect(W * 0.02, H * 0.08, W * 0.96, g.floor - H * 0.08); ctx.strokeRect(W * 0.02, H * 0.08, W * 0.96, g.floor - H * 0.08);
+    rr(W * 0.02, g.rod - 4 * s, W * 0.96, 8 * s, 4 * s); ctx.fillStyle = '#c4ccd6'; ctx.fill(); ctx.stroke(); // ポール
+    for (let i = 0; i < 7; i++) this.hanger(W * 0.07 + i * W * 0.05, g.rod - 4 * s, 0); // 左：まだかかっているハンガー（いくらでもある）
+    ctx.fillStyle = INK; ctx.font = `${Math.round(12 * s)}px ${DISPLAY}`; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillText('ここで押して 右へ', W * 0.06, g.rod + 56 * s);
+    for (const k of [0.82, 0.92]) { const x = W * k; this.hanger(x, g.rod - 4 * s, 0); rr(x - 26 * s, g.rod + 28 * s, 52 * s, 110 * s, 8 * s); ctx.fillStyle = k < 0.9 ? '#3a6fb0' : '#e4574b'; ctx.fill(); ctx.lineWidth = 3; ctx.stroke(); } // 右：パパの服
+    // 鎖（ポールからつながったハンガー）
+    for (let k = 0; k < this.links - this.fly.length; k++) { const h = this.hookAt(k); this.hanger(h.x, h.y - 4 * s, h.lie ? (k % 2 ? 1.3 : -1.3) : 0); } // 飛んでいる最中のものは、着いてから
+    for (const f of this.fly) this.hanger(f.x + (f.tx - f.x) * f.t, f.y + (f.ty - f.y) * f.t - 4 * s, 0);
+    // 「ここより右へ」の線
+    ctx.setLineDash([8 * s, 8 * s]); ctx.strokeStyle = 'rgba(35,27,46,.3)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(g.line, g.rod + 30 * s); ctx.lineTo(g.line, g.floor - 10 * s); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = 'rgba(35,27,46,.45)'; ctx.font = `${Math.round(22 * s)}px ${DISPLAY}`; ctx.textAlign = 'center'; ctx.fillText('→', g.line, H * 0.5); ctx.textAlign = 'left';
+    for (const b of this.back) this.hanger(b.x + (W * 0.2 - b.x) * b.t, b.y + (g.rod - b.y) * b.t, 0, 1 - b.t);
+    if (this.ptr && this.ptr.hold) this.hanger(this.ptr.x, this.ptr.y - 6 * s, 0);
+    if (this.sayT > 0) bigText(this.say, W / 2, H * 0.94, Math.round(28 * s), HOT, PAPER, W * 0.9);
+  },
+  drawHint(t) { const g = this.geo(), p = (t * 1.2) % 1; finger(W * 0.2 + (W * 0.75 - W * 0.2) * p, H * 0.4, 0.9); }
+};
+
+/* ---------- 大盛り43: ホチキス ---------- */
+const STAP_PUSH = 45;  // 押した所から下へこの長さ px（SC()）押しこむと、ガチャン。上へもどすと、また押せる
+const STAP_STRIP = 20; // 1列の芯の数。使い切ると、つめかえる
+const STAP_RELOAD = 0.6; // つめかえにかかる秒数（そのあいだは空うち）
+const STAP_SEC = 20;   // 芯はがしで外す（1本）
+const STAP_BUY = 12, STAP_YEN = 1000; // 1回でこの数以上とめたら、ホチキスの芯の買い直し
+const stapler = {
+  key: 'stapler', name: 'ホチキス', prompt: 'とめろ！', hint: '押したまま 下へ押しこむ', bg: '#e9eef2',
+  bgm: song(150, [
+    ['square', 0.045, '72 . . 72 . . 79 . 77 . . 76 . . 74 . 72 . . 72 . . 79 . 81 . 79 . 77 . . .'],
+    ['triangle', 0.13, '48 . . . 48 . . . 53 . . . 55 . . . 48 . . . 48 . . . 53 . . . 43 . . .']
+  ], ['k..sk.s.k..sk.ss']),
+  shop: [['ホチキスの芯', 'ホッチキス 針 10号'], ['芯はがし', 'ホッチキス 針はがし']],
+  bill(t) { const n = t.stapler || 0, b = t.staplerBuy || 0; return { v: n + '本', n: (b ? 'ホチキスの芯の買い直し・' : '') + '芯はがしで 外す', sec: n * STAP_SEC, yen: b * STAP_YEN }; },
+  init() { this.n = 0; this.ptr = null; this.y0 = 0; this.push = 0; this.ready = true; this.left = STAP_STRIP; this.reload = 0; this.marks = []; this.shake = 0; this.say = ''; this.sayT = 0; },
+  started() { return this.n > 0; },
+  result() { return this.n + '本'; },
+  commit(tot) { add(tot, 'stapler', this.n); add(tot, 'staplerBuy', this.n >= STAP_BUY ? 1 : 0); mx(tot, 'staplerMax', this.n); },
+  geo() { const s = SC(); return { s, desk: H * 0.52, px: W * 0.88, l: W * 0.06, r: W * 0.6, tip: W * 0.36 }; }, // px：ホチキスの後ろ（ちょうつがい）、tip：芯が出る所
+  down(id, x, y) { if (this.ptr == null) { this.ptr = id; this.y0 = y; } }, // どこを押してもよい
+  move(id, x, y) {
+    if (id !== this.ptr) return;
+    this.push = clamp((y - this.y0) / (STAP_PUSH * SC()), 0, 1);
+    if (this.push < 0.4) this.ready = true; // 上へもどすと、また押せる
+    if (this.push >= 1 && this.ready) this.clack();
+  },
+  up(id) { if (id == null || id === this.ptr) { this.ptr = null; this.push = 0; this.ready = true; } },
+  clack() { // ガチャン
+    this.ready = false; this.shake = 0.12;
+    if (this.reload > 0 || this.left <= 0) { sfx.tick(); return; } // つめかえ中は空うち
+    const g = this.geo(), s = g.s;
+    this.left--; sfx.gachan();
+    this.marks.push({ x: rnd(g.l + 20 * s, g.r - 20 * s), y: g.desk - rnd(14, 78) * s, r: rnd(-0.5, 0.5) }); if (this.marks.length > 120) this.marks.shift();
+    if (this.left <= 0) { this.reload = STAP_RELOAD; this.say = '芯を つめかえ…'; this.sayT = 0.6; }
+    if (scoring()) { this.n++; if (this.n === STAP_BUY) { this.say = '芯が もうない…！'; this.sayT = 1; } else if (this.sayT <= 0) { this.say = 'ガチャン'; this.sayT = 0.2; } }
+  },
+  update(dt) {
+    this.sayT = Math.max(0, this.sayT - dt); this.shake = Math.max(0, this.shake - dt);
+    if (this.reload > 0) { this.reload -= dt; if (this.reload <= 0) { this.reload = 0; this.left = STAP_STRIP; } }
+    if (this.ptr == null) this.push = Math.max(0, this.push - dt * 6);
+  },
+  draw() {
+    const g = this.geo(), s = g.s, sx = this.shake > 0 ? rnd(-1, 1) * 3 * s : 0;
+    ctx.fillStyle = this.bg; ctx.fillRect(0, 0, W, g.desk);
+    ctx.fillStyle = '#b07a48'; ctx.fillRect(0, g.desk, W, H - g.desk); ctx.fillStyle = INK; ctx.fillRect(0, g.desk - 2, W, 3); // 机
+    // うら紙の束（とめた芯でいっぱいになっていく）
+    ctx.save(); ctx.translate(sx, 0); ctx.lineWidth = 3; ctx.strokeStyle = INK;
+    for (let i = 0; i < 4; i++) { ctx.fillStyle = PAPER; ctx.fillRect(g.l + i * 3 * s, g.desk - 90 * s + i * 4 * s, g.r - g.l, 90 * s - i * 4 * s); ctx.strokeRect(g.l + i * 3 * s, g.desk - 90 * s + i * 4 * s, g.r - g.l, 90 * s - i * 4 * s); }
+    ctx.fillStyle = 'rgba(35,27,46,.5)'; ctx.font = `${Math.round(13 * s)}px ${DISPLAY}`; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillText('パパの メモ用 うら紙', g.l + 12 * s, g.desk - 72 * s);
+    ctx.strokeStyle = '#6b7380'; ctx.lineWidth = 3 * s; for (const m of this.marks) { ctx.save(); ctx.translate(m.x, m.y); ctx.rotate(m.r); ctx.beginPath(); ctx.moveTo(-8 * s, 0); ctx.lineTo(8 * s, 0); ctx.stroke(); ctx.restore(); } // とめた芯
+    ctx.restore();
+    // ホチキス（横から。ちょうつがいを中心に、上が下りてくる）
+    const open = 0.32 * (1 - this.push), base = g.desk - 10 * s;
+    ctx.lineWidth = 3; ctx.strokeStyle = INK;
+    rr(g.tip - 20 * s, base - 8 * s, g.px - g.tip + 40 * s, 20 * s, 8 * s); ctx.fillStyle = '#2b3039'; ctx.fill(); ctx.stroke(); // 台
+    ctx.save(); ctx.translate(g.px, base - 24 * s); ctx.rotate(open);
+    rr(-(g.px - g.tip) - 24 * s, -40 * s, g.px - g.tip + 44 * s, 40 * s, 16 * s); ctx.fillStyle = '#e4574b'; ctx.fill(); ctx.stroke(); // 上のレバー
+    ctx.fillStyle = 'rgba(255,255,255,.35)'; ctx.fillRect(-(g.px - g.tip) - 10 * s, -32 * s, (g.px - g.tip) * 0.7, 7 * s);
+    ctx.restore();
+    ctx.beginPath(); ctx.arc(g.px, base - 24 * s, 9 * s, 0, Math.PI * 2); ctx.fillStyle = '#c4ccd6'; ctx.fill(); ctx.stroke(); // ちょうつがい
+    // 残りの芯
+    ctx.fillStyle = INK; ctx.font = `${Math.round(13 * s)}px ${DISPLAY}`; ctx.textAlign = 'right'; ctx.fillText('芯 のこり ' + (this.reload > 0 ? 0 : this.left) + '本', W - 14 * s, g.desk + 40 * s); ctx.textAlign = 'left';
+    if (this.sayT > 0) bigText(this.say, W / 2, H * 0.3, Math.round(30 * s), HOT, PAPER, W * 0.9);
+  },
+  drawHint(t) { const g = this.geo(), p = (t * 1.6) % 1; finger(W * 0.62, g.desk - 120 * g.s + Math.sin(p * Math.PI) * 50 * g.s, 0.9); }
+};
+
+/* ---------- 大盛り44: シャツのボタン ---------- */
+const BTN_N = 6;       // 1枚のボタンの数。かけちがえる所がなくなると、次のシャツ
+const BTN_DRAG = 50;   // シャツの左半分でボタンの段を押して、右へこの長さ px（SC()）引っぱると、指の高さにいちばん近い、自分のではない空いた穴にとまる（ユーザーの指摘で、穴までねらって運ぶ形から変えた）
+const BTN_SEC = 30;    // かけ直して、アイロンをかける（1個）
+const BTN_BUY = 4, BTN_YEN = 1000; // 1回でこの数以上かけちがえたら、シャツがよれてクリーニング代
+const BTN_COL = [['#f6f6f2', '#d8dde3'], ['#bcd6f0', '#8fb3d9'], ['#f5d9e0', '#e0aebb'], ['#d9ecd0', '#a9cd9a']];
+const buttons = {
+  key: 'buttons', name: 'シャツのボタン', prompt: 'かけちがえろ！', hint: 'ボタンを 右へ引っぱって かけちがえる', bg: '#dfe6ee',
+  bgm: song(126, [
+    ['ep', 0.07, '67 . 72 . 76 . 72 . 74 . 77 . 81 . . . 79 . 76 . 72 . 74 . 71 . . . . . .'],
+    ['triangle', 0.13, '48 . . . 55 . . . 50 . . . 57 . . . 43 . . . 50 . . . 43 . . . 47 . . .']
+  ], ['k...s.h.k.h.s...']),
+  shop: [['ワイシャツ', 'ワイシャツ 形態安定'], ['ソーイングセット', 'ソーイングセット']],
+  bill(t) { const n = t.buttons || 0, b = t.buttonsBuy || 0; return { v: n + '個', n: (b ? 'シャツがよれて クリーニング代・' : '') + 'かけ直して アイロン', sec: n * BTN_SEC, yen: b * BTN_YEN }; },
+  init() { this.n = 0; this.k = 0; this.newShirt(); this.slide = 0; this.wait = 0; this.ptr = null; this.sq = 0; this.say = ''; this.sayT = 0; },
+  started() { return this.n > 0; },
+  result() { return this.n + '個'; },
+  commit(tot) { add(tot, 'buttons', this.n); add(tot, 'buttonsBuy', this.n >= BTN_BUY ? 1 : 0); mx(tot, 'buttonsMax', this.n); },
+  geo() { const s = SC(); return { s, cx: W / 2, top: H * 0.2, bot: H * 0.9, off: 30 * s, gap: (H * 0.7 - 110 * s) / (BTN_N - 1) }; }, // off：前立ての、真ん中からのずれ（左にボタン、右に穴）、gap：段の間
+  newShirt() { this.col = BTN_COL[this.k++ % BTN_COL.length]; this.btn = []; for (let i = 0; i < BTN_N; i++) this.btn.push({ hole: -1, dx: 0, dy: 0 }); },
+  rowY(i) { const g = this.geo(); return g.top + 70 * g.s + i * g.gap; },
+  btnXY(i) { const g = this.geo(), b = this.btn[i]; if (b.hole >= 0) return { x: g.cx + g.off, y: this.rowY(b.hole) }; return { x: g.cx - g.off + b.dx, y: this.rowY(i) + b.dy }; },
+  free(j) { return !this.btn.some(b => b.hole === j); },
+  canMove() { return this.btn.some((b, i) => b.hole < 0 && [...Array(BTN_N).keys()].some(j => j !== i && this.free(j))); },
+  crumple() { return this.btn.filter(b => b.hole >= 0).length / BTN_N; }, // 0〜1。かけちがえるほど、よれる
+  down(id, x, y) { // 左半分なら、押した高さにいちばん近い、まだとめていないボタンをつまむ
+    if (this.ptr || this.slide > 0 || this.wait > 0) return;
+    const g = this.geo(); if (x > g.cx + g.off * 0.5) return;
+    let best = -1, bd = g.gap * 0.9;
+    this.btn.forEach((b, i) => { if (b.hole >= 0) return; const d = Math.abs(y - this.rowY(i)); if (d < bd) { bd = d; best = i; } });
+    if (best >= 0) this.ptr = { id, i: best, x0: x, y0: y };
+  },
+  move(id, x, y) {
+    const p = this.ptr; if (!p || p.id !== id) return; const b = this.btn[p.i]; b.dx = x - p.x0; b.dy = y - p.y0;
+    if (b.dx < BTN_DRAG * SC()) return;
+    let best = -1, bd = 1e9; // 指の高さにいちばん近い、自分のではない空いた穴
+    for (let j = 0; j < BTN_N; j++) { if (j === p.i || !this.free(j)) continue; const d = Math.abs(this.rowY(p.i) + b.dy - this.rowY(j)); if (d < bd) { bd = d; best = j; } }
+    this.ptr = null; b.dx = 0; b.dy = 0; if (best < 0) return;
+    b.hole = best; this.sq = 0.25; sfx.pochi(); sfx.fwip();
+    if (scoring()) { this.n++; if (this.n === BTN_BUY) { this.say = 'シャツが よれよれ…！'; this.sayT = 1; } else if (this.sayT <= 0) { this.say = 'くしゃっ'; this.sayT = 0.3; } }
+    if (!this.canMove()) this.wait = 0.4;
+  },
+  up(id) { const p = this.ptr; if (!p || (id != null && p.id !== id)) return; this.ptr = null; const b = this.btn[p.i]; b.dx = 0; b.dy = 0; },
+  update(dt) {
+    this.sayT = Math.max(0, this.sayT - dt); this.sq = Math.max(0, this.sq - dt);
+    if (this.wait > 0) { this.wait -= dt; if (this.wait <= 0) { this.slide = 1; this.newShirt(); this.ptr = null; } }
+    if (this.slide > 0) this.slide = Math.max(0, this.slide - dt / 0.3);
+  },
+  draw() {
+    const g = this.geo(), s = g.s, off = this.slide * W, cx = g.cx + off, w = Math.min(W * 0.42, 170 * s), cr = this.crumple(), sq = this.sq / 0.25;
+    const jit = i => Math.sin(i * 7.3 + this.k * 3.1) * cr * 14 * s; // よれぐあい（点ごとに決まったずれ）
+    ctx.fillStyle = this.bg; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#c9b48f'; ctx.fillRect(0, H * 0.12, W, H * 0.88); ctx.fillStyle = INK; ctx.fillRect(0, H * 0.12 - 2, W, 3); // ベッドの上
+    // シャツ（かけちがえるほど、ゆがんで傾き、すそがガタガタ。かけちがえた瞬間は、くしゃっとちぢむ）
+    const my = (g.top + g.bot) / 2;
+    ctx.save(); ctx.translate(cx, my); ctx.rotate(cr * 0.07 * (this.k % 2 ? 1 : -1)); ctx.scale(1 + sq * 0.06, 1 - sq * 0.1); ctx.translate(-cx, -my);
+    ctx.lineWidth = 3; ctx.strokeStyle = INK; ctx.fillStyle = this.col[0];
+    const pts = [[-w * 0.55, g.top], [-w * 1.25, g.top + 140 * s], [-w * 1.0, g.top + 175 * s], [-w * 0.9, g.top + 120 * s], [-w * 0.9, g.bot]];
+    for (let i = 1; i < 6; i++) pts.push([-w * 0.9 + w * 1.8 * i / 6, g.bot + (i % 2 ? -1 : 1) * cr * 18 * s]); // すそ
+    pts.push([w * 0.9, g.bot], [w * 0.9, g.top + 120 * s], [w * 1.0, g.top + 175 * s], [w * 1.25, g.top + 140 * s], [w * 0.55, g.top]);
+    ctx.beginPath(); pts.forEach(([x, y], i) => { const X = cx + x + jit(i), Y = y + jit(i + 20); if (i) ctx.lineTo(X, Y); else ctx.moveTo(X, Y); }); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx - w * 0.55, g.top); ctx.lineTo(cx - 6 * s, g.top + 50 * s + jit(3)); ctx.lineTo(cx - w * 0.3, g.top - 14 * s); ctx.closePath(); ctx.fillStyle = PAPER; ctx.fill(); ctx.stroke(); // えり
+    ctx.beginPath(); ctx.moveTo(cx + w * 0.55, g.top); ctx.lineTo(cx + 6 * s, g.top + 50 * s - jit(5)); ctx.lineTo(cx + w * 0.3, g.top - 14 * s); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.strokeStyle = this.col[1]; ctx.lineWidth = 2; for (const k of [-1, 1]) { ctx.beginPath(); ctx.moveTo(cx + k * g.off * 1.8, g.top + 40 * s); ctx.lineTo(cx + k * g.off * 1.8, g.bot); ctx.stroke(); } // 前立て
+    ctx.strokeStyle = INK;
+    for (let j = 0; j < BTN_N; j++) { const y = this.rowY(j); ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(cx + g.off - 10 * s, y); ctx.lineTo(cx + g.off + 10 * s, y); ctx.stroke(); } // 穴
+    // かけちがえた所のしわ（ボタンの元の高さから、とめた穴へ引っぱられて、まわりにもしわ）
+    this.btn.forEach((b, i) => {
+      if (b.hole < 0) return; const y0 = this.rowY(i), y1 = this.rowY(b.hole);
+      ctx.strokeStyle = this.col[1]; ctx.lineWidth = 4 * s; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(cx - g.off * 1.8, y0); ctx.quadraticCurveTo(cx, (y0 + y1) / 2 + 10 * s, cx + g.off, y1); ctx.stroke();
+      ctx.lineWidth = 3 * s; for (const k of [-1, 1]) for (const d of [1, 2]) { const yy = (y0 + y1) / 2 + k * d * 14 * s; ctx.beginPath(); ctx.moveTo(cx - w * 0.6 + d * 10 * s, yy - k * 6 * s); ctx.quadraticCurveTo(cx - w * 0.35, yy + k * 8 * s, cx - w * 0.15, yy - k * 4 * s); ctx.stroke(); ctx.beginPath(); ctx.moveTo(cx + w * 0.2, yy + k * 4 * s); ctx.quadraticCurveTo(cx + w * 0.4, yy - k * 8 * s, cx + w * 0.62 - d * 10 * s, yy + k * 6 * s); ctx.stroke(); }
+      ctx.lineCap = 'butt';
+    });
+    ctx.strokeStyle = INK;
+    this.btn.forEach((b, i) => { const p = this.btnXY(i); ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(p.x + off, p.y, 11 * s, 0, Math.PI * 2); ctx.fillStyle = PAPER; ctx.fill(); ctx.stroke(); ctx.fillStyle = INK; for (const [ax, ay] of [[-3, -3], [3, -3], [-3, 3], [3, 3]]) { ctx.beginPath(); ctx.arc(p.x + off + ax * s, p.y + ay * s, 1.5 * s, 0, Math.PI * 2); ctx.fill(); } });
+    ctx.restore();
+    ctx.fillStyle = INK; ctx.font = `${Math.round(13 * s)}px ${DISPLAY}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('あしたの 会議用', W / 2, H * 0.08); ctx.textAlign = 'left';
+    if (this.sayT > 0) bigText(this.say, W / 2, H * 0.16, Math.round(28 * s), HOT, PAPER, W * 0.9);
+  },
+  drawHint(t) { const g = this.geo(), p = (t * 1.3) % 1, a = this.btnXY(0); finger(a.x + 80 * g.s * p, a.y + (this.rowY(1) - a.y) * p, 0.9); }
+};
+
+/* ---------- 大盛り45: 洗濯物のシャツ ---------- */
+const INS_PULL = 90;   // すそをつまんで、上へこの長さ px（SC()）めくると、くるっと裏返る
+const INS_SEC = 40;    // 表にもどして、たたみ直す（1枚）
+const INS_BUY = 5, INS_YEN = 1000; // 1回でこの数以上裏返したら、首がのびてシャツの買い直し
+const INS_COL = ['#3a6fb0', '#e4574b', '#3fae5a', '#f2a33a', '#8b5fbf', '#2b3039'];
+const inside = {
+  key: 'inside', name: '洗濯物のシャツ', prompt: 'めくれ！', hint: 'すそをつまんで 上へめくって 裏返す', bg: '#e6f0e6',
+  bgm: song(134, [
+    ['bub', 0.07, '74 . 76 . 79 . 76 . 74 . 72 . 69 . . . 72 . 74 . 76 . 79 . 74 . . . . . .'],
+    ['triangle', 0.13, '50 . . . 57 . . . 48 . . . 55 . . . 45 . . . 52 . . . 43 . . . 50 . . .']
+  ], ['k.h.s.h.k.hhs.h.']),
+  shop: [['Tシャツ', 'Tシャツ 無地'], ['洗濯ネット', '洗濯ネット']],
+  bill(t) { const n = t.inside || 0, b = t.insideBuy || 0; return { v: n + '枚', n: (b ? '首がのびて シャツの買い直し・' : '') + '表にもどして たたみ直す', sec: n * INS_SEC, yen: b * INS_YEN }; },
+  init() { this.n = 0; this.k = 0; this.c = INS_COL[0]; this.ptr = null; this.pull = 0; this.slide = 0; this.pile = []; this.fly = []; this.say = ''; this.sayT = 0; },
+  started() { return this.n > 0; },
+  result() { return this.n + '枚'; },
+  commit(tot) { add(tot, 'inside', this.n); add(tot, 'insideBuy', this.n >= INS_BUY ? 1 : 0); mx(tot, 'insideMax', this.n); },
+  geo() { const s = SC(), w = Math.min(W * 0.34, 130 * s); return { s, cx: W / 2, cy: H * 0.46, w, h: w * 1.5 }; }, // w：胴の半分の幅、h：胴の高さ
+  down(id, x, y) { const g = this.geo(); if (this.ptr == null && this.slide <= 0 && Math.abs(x - g.cx) < g.w * 1.3 && y > g.cy && y < g.cy + g.h * 0.75) { this.ptr = id; this.y0 = y; this.pull = 0; } }, // 胴の下半分（すそ）をつまむ
+  move(id, x, y) { if (id !== this.ptr) return; this.pull = clamp((this.y0 - y) / (INS_PULL * SC()), 0, 1); if (this.pull >= 1) this.turn(); },
+  up(id) { if (id == null || id === this.ptr) { this.ptr = null; this.pull = 0; } },
+  turn() { // くるっ。裏返しのシャツは、右下の山へ
+    const g = this.geo(), s = g.s;
+    this.fly.push({ x: g.cx, y: g.cy, t: 0, c: this.c, tx: W * 0.78 + rnd(-10, 10) * s, ty: H * 0.86 - this.pile.length % 12 * 7 * s });
+    this.ptr = null; this.pull = 0; this.slide = 1; this.c = INS_COL[++this.k % INS_COL.length]; sfx.fwip();
+    if (scoring()) { this.n++; if (this.n === INS_BUY) { this.say = '首が のびた…！'; this.sayT = 1; } else if (this.sayT <= 0) { this.say = 'くるっ'; this.sayT = 0.3; } }
+  },
+  update(dt) {
+    this.sayT = Math.max(0, this.sayT - dt);
+    if (this.slide > 0) this.slide = Math.max(0, this.slide - dt / 0.25);
+    if (this.ptr == null) this.pull = Math.max(0, this.pull - dt * 6);
+    for (const f of this.fly) f.t = Math.min(1, f.t + dt / 0.3);
+    for (let i = this.fly.length - 1; i >= 0; i--) if (this.fly[i].t >= 1) { this.pile.push(this.fly[i]); this.fly.splice(i, 1); }
+    if (this.pile.length > 24) this.pile.shift();
+  },
+  tee(x, y, sc, c, inv, pull) { // Tシャツ（inv：裏返し。色がうすく、ぬい目とタグが見える。pull：すそが めくれている割合）
+    const g = this.geo(), s = g.s, w = g.w * sc, h = g.h * sc, col = inv ? 'rgba(255,255,255,.55)' : null;
+    ctx.save(); ctx.translate(x, y); ctx.lineWidth = 3; ctx.strokeStyle = INK;
+    const body = () => { ctx.beginPath(); ctx.moveTo(-w * 0.45, -h / 2); ctx.lineTo(-w * 1.15, -h / 2 + h * 0.18); ctx.lineTo(-w * 0.95, -h / 2 + h * 0.36); ctx.lineTo(-w, -h / 2 + h * 0.3); ctx.lineTo(-w, h / 2); ctx.lineTo(w, h / 2); ctx.lineTo(w, -h / 2 + h * 0.3); ctx.lineTo(w * 0.95, -h / 2 + h * 0.36); ctx.lineTo(w * 1.15, -h / 2 + h * 0.18); ctx.lineTo(w * 0.45, -h / 2); ctx.quadraticCurveTo(0, -h / 2 + h * 0.14, -w * 0.45, -h / 2); ctx.closePath(); };
+    const fold = h / 2 - pull * h * 0.5; // めくっている所の折り目（めくるほど上へ）。折り目より下は、上へ折り返して裏が見える
+    if (pull > 0) { ctx.save(); ctx.beginPath(); ctx.rect(-w * 2, -h, w * 4, fold + h); ctx.clip(); }
+    body(); ctx.fillStyle = c; ctx.fill(); if (col) { ctx.fillStyle = col; ctx.fill(); } ctx.stroke();
+    if (inv) { ctx.setLineDash([4 * s, 4 * s]); ctx.strokeStyle = 'rgba(35,27,46,.5)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-w + 6 * s, -h / 2 + h * 0.32); ctx.lineTo(-w + 6 * s, h / 2 - 4 * s); ctx.moveTo(w - 6 * s, -h / 2 + h * 0.32); ctx.lineTo(w - 6 * s, h / 2 - 4 * s); ctx.stroke(); ctx.setLineDash([]); ctx.fillStyle = PAPER; ctx.strokeStyle = INK; ctx.lineWidth = 2; ctx.fillRect(-8 * s * sc, -h / 2 + 8 * s * sc, 16 * s * sc, 12 * s * sc); ctx.strokeRect(-8 * s * sc, -h / 2 + 8 * s * sc, 16 * s * sc, 12 * s * sc); } // ぬい目とタグ
+    if (pull > 0) { // 折り返したすそ（裏。手前に来るので少し広く、ぬい目とすそのステッチが見える）
+      ctx.restore(); const fh = h / 2 - fold, fw = w * (1 + 0.08 * pull);
+      ctx.beginPath(); ctx.moveTo(-w, fold); ctx.lineTo(-fw, fold - fh); ctx.lineTo(fw, fold - fh); ctx.lineTo(w, fold); ctx.closePath();
+      ctx.fillStyle = c; ctx.fill(); ctx.fillStyle = 'rgba(255,255,255,.55)'; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = INK; ctx.stroke();
+      ctx.setLineDash([4 * s, 4 * s]); ctx.strokeStyle = 'rgba(35,27,46,.5)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-fw + 8 * s, fold - fh + 8 * s); ctx.lineTo(fw - 8 * s, fold - fh + 8 * s); ctx.moveTo(-w + 6 * s, fold - 4 * s); ctx.lineTo(-fw + 6 * s, fold - fh + 10 * s); ctx.moveTo(w - 6 * s, fold - 4 * s); ctx.lineTo(fw - 6 * s, fold - fh + 10 * s); ctx.stroke(); ctx.setLineDash([]);
+      ctx.strokeStyle = 'rgba(35,27,46,.35)'; ctx.lineWidth = 6 * s; ctx.beginPath(); ctx.moveTo(-w, fold + 3 * s); ctx.lineTo(w, fold + 3 * s); ctx.stroke(); // 折り目のかげ
+    }
+    ctx.restore();
+  },
+  draw() {
+    const g = this.geo(), s = g.s;
+    ctx.fillStyle = this.bg; ctx.fillRect(0, 0, W, H * 0.16);
+    ctx.fillStyle = '#b9d4e6'; ctx.fillRect(0, H * 0.16, W, H * 0.84); ctx.fillStyle = INK; ctx.fillRect(0, H * 0.16 - 2, W, 3); // たたむ台
+    ctx.fillStyle = INK; ctx.font = `${Math.round(13 * s)}px ${DISPLAY}`; ctx.textAlign = 'right'; ctx.fillText('かわいた 洗濯物', W - 12 * s, H * 0.12); ctx.textAlign = 'left';
+    for (const f of this.pile) this.tee(f.tx, f.ty, 0.42, f.c, true, 0);
+    this.tee(g.cx + this.slide * W, g.cy, 1, this.c, false, this.pull);
+    for (const f of this.fly) { const e = f.t; this.tee(f.x + (f.tx - f.x) * e, f.y + (f.ty - f.y) * e, 1 - 0.58 * e, f.c, true, 0); }
+    if (this.sayT > 0) bigText(this.say, W / 2, H * 0.2, Math.round(30 * s), HOT, PAPER, W * 0.9);
+  },
+  drawHint(t) { const g = this.geo(), p = (t * 1.3) % 1; finger(g.cx, g.cy + g.h * 0.4 - p * 90 * g.s, 0.9); }
+};
+
+STAGE_LIST.push(slippers, hangers, stapler, buttons, inside);
+ZUKAN_EXTRA.push(
+  { id: 'slippers', name: '裏おもてなし', desc: 'スリッパを1回で8枚 裏返す', ok: t => (t.slippersMax || 0) >= 8 },
+  { id: 'hangers', name: 'ハンガー列車', desc: 'ハンガーを1回で10本 つなげる', ok: t => (t.hangersMax || 0) >= 10 },
+  { id: 'stapler', name: 'とめどない', desc: 'ホチキスで1回で19本 とめる', ok: t => (t.staplerMax || 0) >= 19 },
+  { id: 'buttons', name: 'ちぐはぐ紳士', desc: 'シャツのボタンを1回で7個 かけちがえる', ok: t => (t.buttonsMax || 0) >= 7 },
+  { id: 'inside', name: '裏表のない人', desc: '洗濯物のシャツを1回で9枚 裏返す', ok: t => (t.insideMax || 0) >= 9 }
+);
