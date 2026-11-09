@@ -12,11 +12,11 @@ const OLD_PAGE = fileUrl(path.join(ROOT, 'index.html'));
 const SITE = 'https://sakuichi.github.io/itazu-rush/';
 const OOMORI_SITE = SITE + 'oomori/';
 
-// 既存10種＋新規45種（第1弾5種・第2弾5種・第3弾5種・第4弾5種・第5弾5種・第6弾5種・第7弾5種・第8弾5種・第9弾5種。この順で #chips に並ぶ）
+// 既存10種＋新規50種（第1弾5種・第2弾5種・第3弾5種・第4弾5種・第5弾5種・第6弾5種・第7弾5種・第8弾5種・第9弾5種・第10弾5種。この順で #chips に並ぶ）
 const OLD_KEYS = ['tissue', 'toilet', 'shoji', 'paste', 'shampoo', 'mud', 'toys', 'puddle', 'hose', 'elev'];
-const NEW_KEYS = ['graffiti', 'soda', 'pudding', 'sticker', 'shoe', 'calendar', 'vacuum', 'futon', 'news', 'bubble', 'piano', 'pillow', 'sofa', 'light', 'yarn', 'closet', 'roll', 'balloon', 'clock', 'hanko', 'gift', 'cake', 'bath', 'peel', 'laces', 'umbrella', 'keyboard', 'tabletop', 'cards', 'glue', 'chair', 'hashi', 'aircon', 'ice', 'lids', 'detergent', 'socks', 'crayon', 'tape', 'caps', 'slippers', 'hangers', 'stapler', 'buttons', 'inside'];
+const NEW_KEYS = ['graffiti', 'soda', 'pudding', 'sticker', 'shoe', 'calendar', 'vacuum', 'futon', 'news', 'bubble', 'piano', 'pillow', 'sofa', 'light', 'yarn', 'closet', 'roll', 'balloon', 'clock', 'hanko', 'gift', 'cake', 'bath', 'peel', 'laces', 'umbrella', 'keyboard', 'tabletop', 'cards', 'glue', 'chair', 'hashi', 'aircon', 'ice', 'lids', 'detergent', 'socks', 'crayon', 'tape', 'caps', 'slippers', 'hangers', 'stapler', 'buttons', 'inside', 'squirt', 'fan', 'remote', 'camera', 'outlet'];
 const KEYS = OLD_KEYS.concat(NEW_KEYS);
-const NEW_NAMES = { graffiti: '落書き', soda: '炭酸', pudding: 'プリン', sticker: 'シール', shoe: '靴飛ばし', calendar: 'カレンダー', vacuum: '掃除機', futon: '布団', news: '新聞', bubble: 'シャボン玉', piano: 'ピアノ', pillow: '枕', sofa: 'ソファ', light: '電気のスイッチ', yarn: '毛糸玉', closet: '押し入れ', roll: 'ロールスクリーン', balloon: '風船', clock: '時計', hanko: 'ハンコ', gift: '菓子折り', cake: 'ケーキのいちご', bath: '入浴剤', peel: '壁紙', laces: '靴ひも', umbrella: '傘', keyboard: 'キーボード', tabletop: 'テーブルの物', cards: 'トランプ', glue: 'スティックのり', chair: 'パパのいす', hashi: '割り箸', aircon: 'エアコン', ice: '製氷皿の氷', lids: '鍋のふた', detergent: '洗剤', socks: '靴下', crayon: 'クレヨン', tape: 'ガムテープ', caps: 'ペンのキャップ', slippers: 'スリッパ', hangers: 'ハンガー', stapler: 'ホチキス', buttons: 'シャツのボタン', inside: '洗濯物のシャツ' };
+const NEW_NAMES = { graffiti: '落書き', soda: '炭酸', pudding: 'プリン', sticker: 'シール', shoe: '靴飛ばし', calendar: 'カレンダー', vacuum: '掃除機', futon: '布団', news: '新聞', bubble: 'シャボン玉', piano: 'ピアノ', pillow: '枕', sofa: 'ソファ', light: '電気のスイッチ', yarn: '毛糸玉', closet: '押し入れ', roll: 'ロールスクリーン', balloon: '風船', clock: '時計', hanko: 'ハンコ', gift: '菓子折り', cake: 'ケーキのいちご', bath: '入浴剤', peel: '壁紙', laces: '靴ひも', umbrella: '傘', keyboard: 'キーボード', tabletop: 'テーブルの物', cards: 'トランプ', glue: 'スティックのり', chair: 'パパのいす', hashi: '割り箸', aircon: 'エアコン', ice: '製氷皿の氷', lids: '鍋のふた', detergent: '洗剤', socks: '靴下', crayon: 'クレヨン', tape: 'ガムテープ', caps: 'ペンのキャップ', slippers: 'スリッパ', hangers: 'ハンガー', stapler: 'ホチキス', buttons: 'シャツのボタン', inside: '洗濯物のシャツ', squirt: '水鉄砲', fan: '扇風機', remote: 'リモコン', camera: 'スマホ連写', outlet: '電源タップ' };
 
 // ページを開く（既存版の helpers.open と同じ形）。errors にはページ内のエラーがたまる
 async function openPage(browser, url, { query = '', width = 390, height = 844 } = {}) {
@@ -318,6 +318,41 @@ const NEW_ACTS = {
     for (let i = 0; i < 6; i++) {
       const g = await p.evaluate(() => { const g = window.__itazu.st.geo(); return { x: g.cx, y: g.cy + g.h * 0.3 }; });
       await m.move(g.x, g.y); await m.down(); await m.move(g.x, g.y - 120, { steps: 4 }); await m.up(); await sleep(300);
+    }
+  },
+  // 押したまま、ぬらせる所を順にねらう（クッション・クッション・ソファ・カーテン・スーツ・絵・じゅうたん）
+  async squirt(p, W, H) {
+    const m = p.mouse, pts = [[0.27, 0.6], [0.73, 0.6], [0.5, 0.7], [0.15, 0.3], [0.8, 0.3], [0.5, 0.26], [0.5, 0.85]];
+    await m.move(W * 0.27, H * 0.6); await m.down();
+    for (const [x, y] of pts) { await m.move(W * x, H * y, { steps: 3 }); await sleep(380); }
+    await m.up();
+  },
+  // 書類が残っている机を、順に押す×8
+  async fan(p, W, H) {
+    const m = p.mouse;
+    for (let i = 0; i < 8; i++) {
+      const q = await p.evaluate(() => { const st = window.__itazu.st, q = st.piles.find(q => q.left > 0); return q && st.mv <= 0 ? st.pos(q) : null; });
+      if (!q) { await sleep(200); continue; }
+      await m.move(q.x, q.y); await m.down(); await sleep(450); await m.up();
+    }
+  },
+  // リモコンのボタンを、左上から順に押す×18
+  async remote(p, W, H) {
+    for (let j = 0; j < 18; j++) { const b = await p.evaluate(j => window.__itazu.st.btn(j % 12), j); await p.mouse.click(b.x, b.y); await sleep(60); }
+  },
+  // ファインダーで押したまま、ぐるぐる動かす
+  async camera(p, W, H) {
+    const m = p.mouse;
+    await m.move(W * 0.5, H * 0.4); await m.down();
+    for (let k = 0; k < 24; k++) { await m.move(W * (0.5 + 0.3 * Math.cos(k)), H * (0.4 + 0.15 * Math.sin(k)), { steps: 4 }); await sleep(30); }
+    await m.up();
+  },
+  // スイッチの列を、左右になぞる×4
+  async outlet(p, W, H) {
+    const m = p.mouse;
+    for (let k = 0; k < 4; k++) {
+      const g = await p.evaluate(() => window.__itazu.st.geo());
+      await m.move(k % 2 ? g.r : g.l, g.sy); await m.down(); await m.move(k % 2 ? g.l : g.r, g.sy, { steps: 10 }); await m.up(); await sleep(500);
     }
   }
 };

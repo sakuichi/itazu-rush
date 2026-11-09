@@ -3910,3 +3910,541 @@ ZUKAN_EXTRA.push(
   { id: 'buttons', name: 'ちぐはぐ紳士', desc: 'シャツのボタンを1回で7個 かけちがえる', ok: t => (t.buttonsMax || 0) >= 7 },
   { id: 'inside', name: '裏表のない人', desc: '洗濯物のシャツを1回で9枚 裏返す', ok: t => (t.insideMax || 0) >= 9 }
 );
+
+/* ===== 第10弾（2026-11-03 追加） ===== */
+Object.assign(sfx, {
+  jet() { noise(0.07, rnd(2200, 3000), 0.8, 0.07); },
+  whoosh() { noise(0.18, rnd(700, 1100), 0.5, 0.12); },
+  pii() { tone(1000, 1000, 0.5, 0.06, 'sine'); },
+  shutter() { noise(0.03, 3200, 1, 0.25); noise(0.04, 1800, 1, 0.2, 'bandpass', 0.05); },
+  pachi() { tone(1600, 900, 0.03, 0.12, 'square'); noise(0.03, 3000, 2, 0.15); }
+});
+
+/* ---------- 大盛り46: 水鉄砲 ---------- */
+const SQ_SOAK = 0.35;  // 1か所を、この秒数ねらい続けると、びしょびしょ
+const SQ_SEC = 60;     // 拭いて、干して乾かす（1か所）
+const SQ_BUY = 4, SQ_YEN = 1000; // 1回でこの数以上ぬらしたら、クリーニング代
+// ぬらせる所（[名前, 左, 上, 右, 下]、画面の幅・高さの割合。前にあるものほど先）
+const SQ_SPOTS = [['クッション', 0.18, 0.55, 0.36, 0.65], ['クッション', 0.64, 0.55, 0.82, 0.65], ['ソファ', 0.12, 0.6, 0.88, 0.78], ['カーテン', 0.03, 0.1, 0.27, 0.56],
+  ['パパのスーツ', 0.7, 0.14, 0.92, 0.46], ['絵', 0.36, 0.17, 0.62, 0.36], ['じゅうたん', 0.06, 0.8, 0.94, 0.9]];
+const SQ_COL = [['#e4574b', '#3a6fb0', '#f2a33a'], ['#3fae5a', '#8b5fbf', '#ff9fb2'], ['#3a6fb0', '#f2a33a', '#3fae5a']];
+const squirt = {
+  key: 'squirt', name: '水鉄砲', prompt: '撃て！', hint: '押したまま ねらって ぬらす', bg: '#efe6d8',
+  bgm: song(144, [
+    ['bub', 0.08, '76 . 79 . 76 . 72 . 74 . 77 . 74 . 71 . 72 . 76 . 79 . 84 . 83 . 79 . . . . .'],
+    ['triangle', 0.13, '48 . . . 55 . 48 . 43 . . . 50 . 43 . 45 . . . 52 . 45 . 43 . . . 47 . . .']
+  ], ['k.h.s.h.k.hkshhh']),
+  shop: [['防水スプレー', '防水スプレー 布'], ['ソファカバー', 'ソファカバー 撥水']],
+  bill(t) { const n = t.squirt || 0, b = t.squirtBuy || 0; return { v: n + 'か所', n: (b ? 'クリーニング代・' : '') + '拭いて 干して 乾かす', sec: n * SQ_SEC, yen: b * SQ_YEN }; },
+  init() { this.n = 0; this.k = 0; this.newRoom(); this.ptr = null; this.slide = 0; this.wait = 0; this.jt = 0; this.drops = []; this.say = ''; this.sayT = 0; },
+  started() { return this.n > 0; },
+  result() { return this.n + 'か所'; },
+  commit(tot) { add(tot, 'squirt', this.n); add(tot, 'squirtBuy', this.n >= SQ_BUY ? 1 : 0); mx(tot, 'squirtMax', this.n); },
+  newRoom() { this.col = SQ_COL[this.k++ % SQ_COL.length]; this.sp = SQ_SPOTS.map(() => ({ wet: 0, done: false, dots: [] })); this.wall = []; },
+  rect(i) { const [, l, t, r, b] = SQ_SPOTS[i]; return { x: W * l, y: H * t, w: W * (r - l), h: H * (b - t) }; },
+  gun() { return { x: W * 0.5, y: H * 0.97 }; },
+  down(id, x, y) { if (this.ptr == null) this.ptr = { id, x, y }; },
+  move(id, x, y) { if (this.ptr && this.ptr.id === id) { this.ptr.x = x; this.ptr.y = y; } },
+  up(id) { if (this.ptr && (id == null || this.ptr.id === id)) this.ptr = null; },
+  update(dt) {
+    this.sayT = Math.max(0, this.sayT - dt);
+    for (const d of this.drops) { d.y += d.v * dt; d.t -= dt; }
+    this.drops = this.drops.filter(d => d.t > 0);
+    if (this.wait > 0) { this.wait -= dt; if (this.wait <= 0) { this.slide = 1; this.newRoom(); } }
+    if (this.slide > 0) { this.slide = Math.max(0, this.slide - dt / 0.3); return; }
+    const p = this.ptr; if (!p || this.wait > 0) return;
+    this.jt -= dt; if (this.jt <= 0) { this.jt = 0.07; sfx.jet(); }
+    const s = SC(), i = SQ_SPOTS.findIndex((_, i) => { const r = this.rect(i); return p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h; });
+    const dot = { x: p.x + rnd(-10, 10) * s, y: p.y + rnd(-10, 10) * s, r: rnd(8, 16) * s };
+    if (i < 0 || this.sp[i].done) { if (Math.random() < 0.3) { this.wall.push(dot); if (this.wall.length > 60) this.wall.shift(); } return; }
+    const q = this.sp[i]; q.wet += dt / SQ_SOAK; if (q.dots.length < 30) q.dots.push(dot);
+    if (q.wet >= 1) { // びしょびしょ
+      q.done = true; sfx.squelch();
+      const r = this.rect(i); for (let k = 0; k < 5; k++) this.drops.push({ x: r.x + r.w * (k + 0.5) / 5, y: r.y + r.h, v: rnd(60, 120) * s, t: 0.8 });
+      if (scoring()) { this.n++; if (this.n === SQ_BUY) { this.say = 'クリーニング代が…！'; this.sayT = 1; } else if (this.sayT <= 0) { this.say = 'びしょびしょ'; this.sayT = 0.3; } }
+      if (this.sp.every(q => q.done)) this.wait = 0.4;
+    }
+  },
+  draw() {
+    const s = SC(), off = this.slide * W, [c1, c2, c3] = this.col;
+    ctx.fillStyle = this.bg; ctx.fillRect(0, 0, W, H * 0.8);
+    ctx.fillStyle = '#b98a5c'; ctx.fillRect(0, H * 0.8, W, H * 0.2); ctx.fillStyle = INK; ctx.fillRect(0, H * 0.8 - 2, W, 3);
+    for (const d of this.wall) { ctx.fillStyle = 'rgba(60,100,170,.18)'; ctx.beginPath(); ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2); ctx.fill(); }
+    ctx.save(); ctx.translate(off, 0);
+    for (let i = SQ_SPOTS.length - 1; i >= 0; i--) { // 後ろのものから描く
+      const r = this.rect(i), q = this.sp[i], name = SQ_SPOTS[i][0];
+      ctx.lineWidth = 3; ctx.strokeStyle = INK;
+      if (name === 'カーテン') { ctx.fillStyle = '#bfe0f0'; ctx.fillRect(r.x, r.y, r.w, r.h * 0.9); ctx.fillStyle = c3; for (let k = 0; k < 2; k++) { rr(r.x + k * r.w * 0.6, r.y, r.w * 0.4, r.h, 6 * s); ctx.fill(); ctx.stroke(); } }
+      else if (name === 'パパのスーツ') { ctx.beginPath(); ctx.moveTo(r.x + r.w * 0.5, r.y - 10 * s); ctx.lineTo(r.x + r.w * 0.5, r.y); ctx.stroke(); rr(r.x, r.y, r.w, r.h, 10 * s); ctx.fillStyle = '#3b3f55'; ctx.fill(); ctx.stroke(); ctx.fillStyle = PAPER; ctx.beginPath(); ctx.moveTo(r.x + r.w * 0.35, r.y); ctx.lineTo(r.x + r.w * 0.5, r.y + r.h * 0.4); ctx.lineTo(r.x + r.w * 0.65, r.y); ctx.fill(); }
+      else if (name === '絵') { ctx.fillStyle = '#c99a63'; ctx.fillRect(r.x, r.y, r.w, r.h); ctx.strokeRect(r.x, r.y, r.w, r.h); ctx.fillStyle = '#ffe9a8'; ctx.fillRect(r.x + 8 * s, r.y + 8 * s, r.w - 16 * s, r.h - 16 * s); ctx.fillStyle = '#ff9f43'; ctx.beginPath(); ctx.arc(r.x + r.w * 0.5, r.y + r.h * 0.5, r.h * 0.22, 0, Math.PI * 2); ctx.fill(); }
+      else if (name === 'ソファ') { rr(r.x, r.y, r.w, r.h, 16 * s); ctx.fillStyle = c1; ctx.fill(); ctx.stroke(); rr(r.x - 8 * s, r.y + r.h * 0.35, 30 * s, r.h * 0.65, 10 * s); ctx.fill(); ctx.stroke(); rr(r.x + r.w - 22 * s, r.y + r.h * 0.35, 30 * s, r.h * 0.65, 10 * s); ctx.fill(); ctx.stroke(); }
+      else if (name === 'クッション') { rr(r.x, r.y, r.w, r.h, 14 * s); ctx.fillStyle = c2; ctx.fill(); ctx.stroke(); }
+      else { ctx.beginPath(); ctx.ellipse(r.x + r.w / 2, r.y + r.h / 2, r.w / 2, r.h / 2, 0, 0, Math.PI * 2); ctx.fillStyle = '#d9c38f'; ctx.fill(); ctx.stroke(); }
+      // ぬれたあと（びしょびしょになると、全体が濃くなる）
+      ctx.save(); ctx.beginPath(); ctx.rect(r.x, r.y, r.w, r.h); ctx.clip();
+      ctx.fillStyle = 'rgba(20,40,90,.28)'; for (const d of q.dots) { ctx.beginPath(); ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2); ctx.fill(); }
+      if (q.done) { ctx.fillStyle = 'rgba(20,40,90,.22)'; ctx.fillRect(r.x, r.y, r.w, r.h); }
+      ctx.restore();
+    }
+    ctx.restore();
+    ctx.fillStyle = 'rgba(80,140,220,.8)'; for (const d of this.drops) { ctx.beginPath(); ctx.ellipse(d.x, d.y, 3 * s, 5 * s, 0, 0, Math.PI * 2); ctx.fill(); }
+    // 水鉄砲と、水
+    const gn = this.gun(), p = this.ptr, a = p ? Math.atan2(p.y - gn.y, p.x - gn.x) : -Math.PI / 2;
+    if (p && this.slide <= 0) {
+      ctx.strokeStyle = 'rgba(80,150,230,.75)'; ctx.lineWidth = 6 * s; ctx.lineCap = 'round'; ctx.setLineDash([10 * s, 7 * s]); ctx.lineDashOffset = -clock * 400;
+      const mx2 = (gn.x + p.x) / 2, my2 = Math.min(gn.y, p.y) - 40 * s; ctx.beginPath(); ctx.moveTo(gn.x + Math.cos(a) * 50 * s, gn.y + Math.sin(a) * 50 * s); ctx.quadraticCurveTo(mx2, my2, p.x, p.y); ctx.stroke();
+      ctx.setLineDash([]); ctx.lineCap = 'butt';
+    }
+    ctx.save(); ctx.translate(gn.x, gn.y); ctx.rotate(a + Math.PI / 2); ctx.lineWidth = 3; ctx.strokeStyle = INK;
+    rr(-14 * s, -55 * s, 28 * s, 60 * s, 10 * s); ctx.fillStyle = '#2bb3a3'; ctx.fill(); ctx.stroke();
+    rr(-6 * s, -70 * s, 12 * s, 18 * s, 3 * s); ctx.fillStyle = POP; ctx.fill(); ctx.stroke();
+    ctx.restore();
+    if (this.sayT > 0) bigText(this.say, W / 2, H * 0.06, Math.round(28 * s), HOT, PAPER, W * 0.9);
+  },
+  drawHint(t) { const r = this.rect(2), p = (t * 0.8) % 1; finger(r.x + r.w * (0.2 + 0.6 * p), r.y + r.h * 0.6, 0.9); }
+};
+
+/* ---------- 大盛り47: 扇風機 ---------- */
+const FAN_CONE = 0.3;  // 首の向きから左右この角度（ラジアン）までの山に、風が当たる
+const FAN_RATE = 10;   // 風が当たっている山から、1秒に飛ぶ枚数
+const FAN_STACK = 6;   // 1つの机の書類の枚数
+const FAN_SEC = 10;    // 拾って、ページの順に並べ直す（1枚）
+const FAN_BUY = 20, FAN_YEN = 1000; // 1回でこの数以上飛ばしたら、しわくちゃで印刷し直し
+const FAN_DESK = [[0.17, 0.6], [0.5, 0.4], [0.83, 0.6]]; // 机を置く所（画面の幅・高さの割合）
+const FAN_MOVE = 0.5; // 3つの机の書類が全部なくなると、扇風機が次の場所へ移る（机と床の書類がまとめて横へ流れ、次の机3つが横からスライドしてくる）。その秒数（ユーザーの指摘）
+const fan = {
+  key: 'fan', name: '扇風機', prompt: '飛ばせ！', hint: '書類の山に 向けて 押す', bg: '#e3ecf2',
+  bgm: song(146, [
+    ['ep', 0.07, '79 . 76 . 72 . 76 . 79 . 84 . 83 . 79 . 77 . 74 . 71 . 74 . 77 . 81 . 79 . . .'],
+    ['triangle', 0.13, '48 . . . 52 . . . 55 . . . 52 . . . 43 . . . 47 . . . 50 . . . 47 . . .']
+  ], ['k.hhs.h.k.hhs.hh']),
+  shop: [['扇風機', '扇風機 リビング'], ['クリップボード', 'クリップボード A4']],
+  bill(t) { const n = t.fan || 0, b = t.fanBuy || 0; return { v: n + '枚', n: (b ? 'しわくちゃで 印刷し直し・' : '') + '拾って 順番に並べ直す', sec: n * FAN_SEC, yen: b * FAN_YEN }; },
+  init() { this.n = 0; this.pg = 1; this.a = -Math.PI / 2; this.spin = 0; this.ptr = null; this.wt = 0; this.fly = []; this.floor = []; this.piles = FAN_DESK.map((_, i) => this.newStack(i)); this.old = null; this.mv = 0; this.moves = 0; this.say = ''; this.sayT = 0; },
+  started() { return this.n > 0; },
+  result() { return this.n + '枚'; },
+  commit(tot) { add(tot, 'fan', this.n); add(tot, 'fanBuy', this.n >= FAN_BUY ? 1 : 0); mx(tot, 'fanMax', this.n); },
+  geo() { const s = SC(); return { s, fx: W * 0.5, fy: H * 0.8, floor: H * 0.6, leg: H * 0.17 }; }, // floor：奥の壁と床の境目、leg：机の脚
+  newStack(slot) { return { slot, left: FAN_STACK, acc: 0 }; },
+  mvp() { return this.mv > 0 ? 1 - this.mv / FAN_MOVE : 1; }, // 次の場所へ移る途中（0〜1）
+  pos(q) { const [x, y] = FAN_DESK[q.slot], p = this.mvp(); return { x: W * x + (q.old ? -p : 1 - p) * W, y: H * y }; }, // 移る途中は、前の机が左へ流れ、次の机が右から来る
+  down(id, x, y) { if (this.ptr == null) { this.ptr = id; this.aim(x, y); } },
+  move(id, x, y) { if (id === this.ptr) this.aim(x, y); },
+  up(id) { if (id == null || id === this.ptr) this.ptr = null; },
+  aim(x, y) { const g = this.geo(); this.a = clamp(Math.atan2(Math.min(y, g.fy - 10 * g.s) - g.fy, x - g.fx), -Math.PI + 0.15, -0.15); }, // 首は上半分だけ向く
+  update(dt) {
+    const g = this.geo(), s = g.s, on = this.ptr != null;
+    this.sayT = Math.max(0, this.sayT - dt);
+    this.spin += dt * (on ? 40 : 6);
+    if (on) { this.wt -= dt; if (this.wt <= 0) { this.wt = 0.18; sfx.whoosh(); } }
+    this.piles.forEach((q, j) => {
+      if (q.left <= 0) return;
+      const p = this.pos(q), d = Math.atan2(p.y - g.fy, p.x - g.fx), da = Math.abs(Math.atan2(Math.sin(d - this.a), Math.cos(d - this.a)));
+      if (!on || this.mv > 0 || da > FAN_CONE) { q.acc = 0; return; }
+      q.acc += dt * FAN_RATE;
+      while (q.acc >= 1 && q.left > 0) { // 1枚、風で飛ぶ
+        q.acc -= 1; q.left--; const v = rnd(380, 560) * s;
+        this.fly.push({ x: p.x, y: p.y - q.left * 2 * s, vx: Math.cos(d) * v + rnd(-80, 80) * s, vy: Math.sin(d) * v - rnd(40, 120) * s, r: 0, vr: rnd(-6, 6), ph: rnd(0, 6), pg: this.pg++, land: rnd(g.floor + 20 * s, H - 14 * s) });
+        sfx.rustle();
+        if (scoring()) { this.n++; if (this.n === FAN_BUY) { this.say = 'あしたの 会議の資料が…！'; this.sayT = 1; } else if (this.sayT <= 0) { this.say = 'バサバサッ'; this.sayT = 0.3; } }
+      }
+    });
+    if (this.mv > 0) { this.mv -= dt; if (this.mv <= 0) { this.mv = 0; this.old = null; this.moves++; this.floor = this.floor.filter(f => !f.old); } }
+    else if (this.piles.every(q => q.left <= 0)) { // 次の場所へ
+      this.mv = FAN_MOVE; this.old = this.piles.map(q => ({ ...q, old: true })); this.piles = FAN_DESK.map((_, i) => this.newStack(i)); for (const f of this.floor) f.old = true; sfx.slide();
+    }
+    for (const f of this.fly) { // ひらひら舞って、床に落ちる
+      f.vx *= Math.pow(0.35, dt); f.vy = f.vy * Math.pow(0.35, dt) + 260 * s * dt; f.x += (f.vx + Math.sin(clock * 6 + f.ph) * 60 * s) * dt; f.y += f.vy * dt; f.r += f.vr * dt;
+      if (f.x < 10 * s) { f.x = 10 * s; f.vx = Math.abs(f.vx); } if (f.x > W - 10 * s) { f.x = W - 10 * s; f.vx = -Math.abs(f.vx); }
+      if (f.y < 10 * s) { f.y = 10 * s; f.vy = Math.abs(f.vy); }
+    }
+    for (let i = this.fly.length - 1; i >= 0; i--) { const f = this.fly[i]; if (f.vy > 0 && f.y >= f.land) { if (this.mv > 0) f.old = true; this.floor.push(f); this.fly.splice(i, 1); } }
+    if (this.floor.length > 120) this.floor.splice(0, this.floor.length - 120);
+  },
+  sheet(x, y, r, pg) { // 書類1枚
+    const s = SC(); ctx.save(); ctx.translate(x, y); ctx.rotate(r); ctx.fillStyle = PAPER; ctx.strokeStyle = INK; ctx.lineWidth = 2; ctx.fillRect(-13 * s, -17 * s, 26 * s, 34 * s); ctx.strokeRect(-13 * s, -17 * s, 26 * s, 34 * s);
+    ctx.fillStyle = 'rgba(35,27,46,.35)'; for (let k = 0; k < 4; k++) ctx.fillRect(-9 * s, (-11 + k * 6) * s, 18 * s, 2 * s);
+    ctx.fillStyle = INK; ctx.font = `${Math.round(8 * s)}px ${DISPLAY}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(pg, 0, 12 * s); ctx.textAlign = 'left'; ctx.restore();
+  },
+  draw() {
+    const g = this.geo(), s = g.s;
+    ctx.fillStyle = this.bg; ctx.fillRect(0, 0, W, g.floor);
+    ctx.fillStyle = '#b98a5c'; ctx.fillRect(0, g.floor, W, H - g.floor); ctx.fillStyle = INK; ctx.fillRect(0, g.floor - 2, W, 3);
+    const mp = this.mvp(), step = 70 * s, sh0 = ((this.moves + (this.mv > 0 ? mp : 0)) * W) % step; // 床の板の継ぎ目（移るときに流れる）
+    ctx.strokeStyle = 'rgba(90,50,20,.25)'; ctx.lineWidth = 2; for (let x = -sh0; x < W + step; x += step) { ctx.beginPath(); ctx.moveTo(x, g.floor); ctx.lineTo(x - 30 * s, H); ctx.stroke(); }
+    for (const f of this.floor) this.sheet(f.x - (f.old ? mp * W : 0), f.y, f.r, f.pg);
+    // 机と、書類の山
+    for (const q of [...(this.old || []), ...this.piles]) {
+      const p = this.pos(q);
+      ctx.lineWidth = 3; ctx.strokeStyle = INK; ctx.fillStyle = '#8a5a36'; for (const k of [-1, 1]) { ctx.fillRect(p.x + k * 32 * s - 4 * s, p.y + 26 * s, 8 * s, g.leg); ctx.strokeRect(p.x + k * 32 * s - 4 * s, p.y + 26 * s, 8 * s, g.leg); } // 脚
+      ctx.fillRect(p.x - 42 * s, p.y + 18 * s, 84 * s, 10 * s); ctx.strokeRect(p.x - 42 * s, p.y + 18 * s, 84 * s, 10 * s); // 天板
+      if (q.left <= 0) continue;
+      ctx.save(); ctx.translate(p.x, p.y + 18 * s);
+      for (let k = 0; k < q.left; k++) { ctx.fillStyle = PAPER; ctx.lineWidth = 2; ctx.fillRect(-26 * s + (k % 2) * 2 * s, -(k + 1) * 4 * s, 52 * s, 4 * s); ctx.strokeRect(-26 * s + (k % 2) * 2 * s, -(k + 1) * 4 * s, 52 * s, 4 * s); }
+      ctx.fillStyle = INK; ctx.font = `${Math.round(10 * s)}px ${DISPLAY}`; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.fillText('会議の資料', 0, -(q.left + 1) * 4 * s); ctx.textAlign = 'left';
+      ctx.restore();
+    }
+    // 風（押しているあいだ）
+    if (this.ptr != null) { ctx.strokeStyle = 'rgba(35,27,46,.18)'; ctx.lineWidth = 3; for (let k = -2; k <= 2; k++) { const a = this.a + k * FAN_CONE * 0.45, d0 = 60 * s + ((clock * 500 + k * 70) % 220) * s; ctx.beginPath(); ctx.moveTo(g.fx + Math.cos(a) * d0, g.fy + Math.sin(a) * d0); ctx.lineTo(g.fx + Math.cos(a) * (d0 + 40 * s), g.fy + Math.sin(a) * (d0 + 40 * s)); ctx.stroke(); } }
+    // 扇風機（首が向きを変える）
+    ctx.lineWidth = 3; ctx.strokeStyle = INK; ctx.fillStyle = PAPER;
+    ctx.beginPath(); ctx.ellipse(g.fx, H * 0.93, 46 * s, 12 * s, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.fillRect(g.fx - 5 * s, g.fy, 10 * s, H * 0.93 - g.fy); ctx.strokeRect(g.fx - 5 * s, g.fy, 10 * s, H * 0.93 - g.fy);
+    ctx.save(); ctx.translate(g.fx, g.fy); ctx.rotate(this.a + Math.PI / 2);
+    ctx.beginPath(); ctx.ellipse(0, 0, 50 * s, 16 * s, 0, 0, Math.PI * 2); ctx.fillStyle = '#cfe3ef'; ctx.fill(); ctx.stroke(); // 羽のカバー（横から見た形）
+    ctx.fillStyle = '#7fb3d6'; for (let k = 0; k < 3; k++) { const w = Math.cos(this.spin + k * 2.1) * 42 * s; ctx.beginPath(); ctx.ellipse(w / 2, -2 * s, Math.abs(w) / 2 + 2 * s, 10 * s, 0, 0, Math.PI * 2); ctx.fill(); }
+    ctx.beginPath(); ctx.ellipse(0, 0, 50 * s, 16 * s, 0, 0, Math.PI * 2); ctx.stroke();
+    rr(-12 * s, 8 * s, 24 * s, 22 * s, 6 * s); ctx.fillStyle = PAPER; ctx.fill(); ctx.stroke(); // モーター
+    ctx.restore();
+    rr(g.fx - 34 * s, H * 0.9, 68 * s, 14 * s, 5 * s); ctx.fillStyle = PAPER; ctx.fill(); ctx.stroke();
+    ctx.fillStyle = this.ptr != null ? HOT : '#999'; ctx.font = `${Math.round(10 * s)}px ${DISPLAY}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('強', g.fx + 18 * s, H * 0.9 + 7 * s); ctx.textAlign = 'left';
+    for (const f of this.fly) this.sheet(f.x, f.y, f.r, f.pg);
+    if (this.sayT > 0) bigText(this.say, W / 2, H * 0.08, Math.round(28 * s), HOT, PAPER, W * 0.9);
+  },
+  drawHint(t) { const p = this.pos(this.piles[0]); tapHint(p.x, p.y, t); }
+};
+
+/* ---------- 大盛り48: リモコン ---------- */
+const RMT_KEYS = [['字幕', 'cc'], ['音声', 'voice'], ['入力切替', 'input'], ['画面サイズ', 'size'], ['音量＋', 'vol'], ['明るさ', 'bright'],
+  ['言語', 'lang'], ['チャンネル', 'ch'], ['番組表', 'guide'], ['データ', 'data'], ['タイマー', 'timer'], ['色', 'color']]; // ボタンと、押すと変わる設定。全部変えると、次のテレビ。リモコンのボタンは3列×4段に並べるので、12個まで
+const RMT_SEC = 40;    // 説明書を見ながら、設定を元にもどす（1個）
+const RMT_BUY = 8, RMT_YEN = 1000; // 1回でこの数以上変えたら、もどせなくて電気屋さんの出張費
+const RMT_ROOM = ['リビングのテレビ', '子ども部屋のテレビ', 'おじいちゃんのテレビ'];
+const remote = {
+  key: 'remote', name: 'リモコン', prompt: '押しまくれ！', hint: 'ボタンを 押して 設定を変える', bg: '#e6e2ee',
+  bgm: song(138, [
+    ['square', 0.04, '84 . 84 . 81 . 79 . 81 . . . 76 . . . 84 . 84 . 86 . 88 . 86 . . . . . . .'],
+    ['triangle', 0.13, '48 . . . 48 . . . 45 . . . 45 . . . 41 . . . 41 . . . 43 . . . 43 . . .']
+  ], ['k.h.s.h.k.hks.h.']),
+  shop: [['テレビのリモコン', 'テレビ リモコン 汎用'], ['リモコンカバー', 'リモコンカバー']],
+  bill(t) { const n = t.remote || 0, b = t.remoteBuy || 0; return { v: n + '個', n: (b ? 'もどせなくて 電気屋さんの出張費・' : '') + '説明書を見ながら 元にもどす', sec: n * RMT_SEC, yen: b * RMT_YEN }; },
+  init() { this.n = 0; this.k = 0; this.newTV(); this.slide = 0; this.wait = 0; this.press = -1; this.pt = 0; this.say = ''; this.sayT = 0; },
+  started() { return this.n > 0; },
+  result() { return this.n + '個'; },
+  commit(tot) { add(tot, 'remote', this.n); add(tot, 'remoteBuy', this.n >= RMT_BUY ? 1 : 0); mx(tot, 'remoteMax', this.n); },
+  newTV() { this.room = RMT_ROOM[this.k % RMT_ROOM.length]; this.k++; this.on = new Set(); this.order = RMT_KEYS.map((_, i) => i).sort(() => Math.random() - 0.5); },
+  geo() { const s = SC(); return { s, tv: { x: W * 0.06, y: H * 0.15, w: W * 0.88, h: H * 0.3 }, rm: { x: W * 0.14, y: H * 0.52, w: W * 0.72, h: H * 0.46 } }; }, // テレビは、左上の数字に重ならない高さ
+  btn(j) { const g = this.geo(), c = j % 3, r = Math.floor(j / 3); return { x: g.rm.x + g.rm.w * (c + 0.5) / 3, y: g.rm.y + g.rm.h * (0.22 + r * 0.19), w: g.rm.w * 0.29, h: g.rm.h * 0.15 }; }, // j 番目の場所
+  down(id, x, y) {
+    if (this.slide > 0 || this.wait > 0) return;
+    for (let j = 0; j < RMT_KEYS.length; j++) {
+      const b = this.btn(j); const m = 4 * SC(); if (Math.abs(x - b.x) > b.w / 2 + m || Math.abs(y - b.y) > b.h / 2 + m) continue;
+      const key = RMT_KEYS[this.order[j]][1]; this.press = j; this.pt = 0.12; sfx.pochi();
+      if (this.on.has(key)) return; // もう変えた設定は、押しても同じ
+      this.on.add(key); if (key === 'vol') sfx.beep();
+      if (scoring()) { this.n++; if (this.n === RMT_BUY) { this.say = 'もう もどせない…！'; this.sayT = 1; } else if (this.sayT <= 0) { this.say = 'ピッ'; this.sayT = 0.2; } }
+      if (this.on.size >= RMT_KEYS.length) { this.wait = 0.6; sfx.pii(); }
+      return;
+    }
+  },
+  move() {},
+  up() {},
+  update(dt) {
+    this.sayT = Math.max(0, this.sayT - dt); this.pt = Math.max(0, this.pt - dt);
+    if (this.wait > 0) { this.wait -= dt; if (this.wait <= 0) { this.slide = 1; this.newTV(); } }
+    if (this.slide > 0) this.slide = Math.max(0, this.slide - dt / 0.3);
+  },
+  program(x, y, w, h, sea) { // 番組（天気予報。チャンネルを変えると海の番組）
+    const s = SC();
+    if (sea) { ctx.fillStyle = '#7cc6ef'; ctx.fillRect(x, y, w, h); ctx.fillStyle = '#2d7fc1'; ctx.fillRect(x, y + h * 0.55, w, h * 0.45); ctx.fillStyle = PAPER; ctx.beginPath(); ctx.moveTo(x + w * 0.4, y + h * 0.55); ctx.lineTo(x + w * 0.6, y + h * 0.55); ctx.lineTo(x + w * 0.55, y + h * 0.65); ctx.lineTo(x + w * 0.45, y + h * 0.65); ctx.fill(); ctx.fillRect(x + w * 0.49, y + h * 0.3, 3 * s, h * 0.25); return; }
+    ctx.fillStyle = '#9fd3f2'; ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = '#7dc77a'; ctx.beginPath(); ctx.ellipse(x + w * 0.62, y + h * 0.55, w * 0.18, h * 0.32, 0.6, 0, Math.PI * 2); ctx.fill(); // 地図
+    ctx.fillStyle = '#ff9f43'; ctx.beginPath(); ctx.arc(x + w * 0.22, y + h * 0.4, h * 0.13, 0, Math.PI * 2); ctx.fill(); // 晴れ
+    ctx.fillStyle = PAPER; ctx.beginPath(); ctx.arc(x + w * 0.62, y + h * 0.42, h * 0.08, 0, Math.PI * 2); ctx.arc(x + w * 0.67, y + h * 0.4, h * 0.1, 0, Math.PI * 2); ctx.arc(x + w * 0.72, y + h * 0.43, h * 0.07, 0, Math.PI * 2); ctx.fill(); // くもり
+    ctx.fillStyle = INK; ctx.font = `${Math.round(16 * s)}px ${DISPLAY}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('25℃', x + w * 0.22, y + h * 0.66); ctx.fillText('22℃', x + w * 0.67, y + h * 0.62);
+  },
+  tag(t, x, y, bg, fg) { const s = SC(); ctx.font = `${Math.round(11 * s)}px ${DISPLAY}`; const w = ctx.measureText(t).width + 12 * s; ctx.fillStyle = bg; ctx.fillRect(x, y, w, 18 * s); ctx.fillStyle = fg; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillText(t, x + 6 * s, y + 9 * s); return w; },
+  draw() {
+    const g = this.geo(), s = g.s, off = this.slide * W, on = k => this.on.has(k);
+    ctx.fillStyle = this.bg; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#c9a06b'; ctx.fillRect(0, H * 0.48, W, H * 0.52); ctx.fillStyle = INK; ctx.fillRect(0, H * 0.48 - 2, W, 3); // テレビ台・こたつの上
+    ctx.save(); ctx.translate(off, 0);
+    const tv = g.tv, sx = tv.x + 8 * s, sy = tv.y + 8 * s, sw = tv.w - 16 * s, sh = tv.h - 16 * s;
+    rr(tv.x, tv.y, tv.w, tv.h, 8 * s); ctx.fillStyle = INK; ctx.fill();
+    ctx.save(); ctx.beginPath(); ctx.rect(sx, sy, sw, sh); ctx.clip();
+    ctx.save(); if (on('size')) { ctx.translate(sx + sw / 2, sy + sh / 2); ctx.scale(1.6, 1); ctx.translate(-(sx + sw / 2), -(sy + sh / 2)); } this.program(sx, sy, sw, sh, on('ch')); ctx.restore();
+    if (on('color')) { ctx.fillStyle = 'rgba(60,255,90,.3)'; ctx.fillRect(sx, sy, sw, sh); }
+    if (on('bright')) { ctx.fillStyle = 'rgba(255,255,255,.45)'; ctx.fillRect(sx, sy, sw, sh); }
+    if (on('input')) { ctx.fillStyle = 'rgba(20,40,170,.55)'; ctx.fillRect(sx, sy, sw, sh); ctx.fillStyle = PAPER; ctx.font = `${Math.round(13 * s)}px ${DISPLAY}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('HDMI 2　信号がありません', sx + sw / 2, sy + sh * 0.5); }
+    if (on('guide')) { // 番組表（画面いっぱい。ユーザーの指摘で、右半分だけの形から変えた）
+      const hh = sh * 0.14, tw = sw * 0.12, cw = (sw - tw) / 4, pc = ['#ffe3a3', '#cfe8ff', '#d9f2c9', '#ffd6dc'];
+      ctx.fillStyle = PAPER; ctx.fillRect(sx, sy, sw, sh); ctx.fillStyle = '#3a6fb0'; ctx.fillRect(sx, sy, sw, hh);
+      ctx.font = `${Math.round(10 * s)}px ${DISPLAY}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      for (let c = 0; c < 4; c++) {
+        ctx.fillStyle = PAPER; ctx.fillText(['1', '4', '6', '8'][c] + 'ch', sx + tw + cw * (c + 0.5), sy + hh / 2);
+        for (let r = 0; r < 3; r++) { const y = sy + hh + (sh - hh) * r / 3, h = (sh - hh) / 3; ctx.fillStyle = pc[(c + r) % 4]; ctx.fillRect(sx + tw + cw * c + 2 * s, y + 2 * s, cw - 4 * s, h - 4 * s); ctx.fillStyle = 'rgba(35,27,46,.35)'; ctx.fillRect(sx + tw + cw * c + 6 * s, y + 8 * s, cw * 0.6, 3 * s); ctx.fillRect(sx + tw + cw * c + 6 * s, y + 15 * s, cw * 0.4, 3 * s); }
+      }
+      ctx.fillStyle = INK; for (let r = 0; r < 3; r++) ctx.fillText((19 + r) + '時', sx + tw / 2, sy + hh + (sh - hh) * (r + 0.5) / 3);
+    }
+    if (on('data')) { const c = ['#3a6fb0', '#e4574b', '#3fae5a', '#ffd23f']; ctx.fillStyle = 'rgba(255,253,245,.92)'; ctx.fillRect(sx, sy + sh * 0.62, sw * 0.55, sh * 0.38); c.forEach((col, k) => { ctx.fillStyle = col; ctx.fillRect(sx + 8 * s + k * sw * 0.13, sy + sh * 0.8, sw * 0.11, sh * 0.12); }); }
+    if (on('cc')) { ctx.fillStyle = 'rgba(0,0,0,.8)'; ctx.fillRect(sx + sw * 0.08, sy + sh * 0.78, sw * 0.84, sh * 0.14); ctx.fillStyle = PAPER; ctx.font = `${Math.round(12 * s)}px ${DISPLAY}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('（気象予報士）あしたは 晴れのち くもり…', sx + sw / 2, sy + sh * 0.85, sw * 0.8); }
+    let tx = sx + 6 * s;
+    if (on('voice')) tx += this.tag('副音声', tx, sy + 6 * s, POP, INK) + 4 * s;
+    if (on('lang')) tx += this.tag('English', tx, sy + 6 * s, PAPER, INK) + 4 * s;
+    if (on('timer')) this.tag('おやすみタイマー 30分', tx, sy + 6 * s, INK, PAPER);
+    if (on('vol')) { ctx.fillStyle = '#3fae5a'; for (let k = 0; k < 20; k++) ctx.fillRect(sx + 10 * s + k * 7 * s, sy + sh * 0.68, 5 * s, 12 * s); this.tag('音量 100', sx + 10 * s + 142 * s, sy + sh * 0.66, INK, PAPER); }
+    ctx.restore();
+    ctx.fillStyle = INK; ctx.font = `${Math.round(11 * s)}px ${DISPLAY}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(this.room, W / 2, tv.y + tv.h + 14 * s);
+    // リモコン
+    const rm = g.rm; rr(rm.x, rm.y, rm.w, rm.h, 26 * s); ctx.fillStyle = '#3b3f55'; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = INK; ctx.stroke();
+    ctx.beginPath(); ctx.arc(rm.x + rm.w * 0.8, rm.y + rm.h * 0.08, 11 * s, 0, Math.PI * 2); ctx.fillStyle = HOT; ctx.fill(); ctx.stroke(); // 電源（押せない）
+    for (let j = 0; j < RMT_KEYS.length; j++) {
+      const b = this.btn(j), [label, key] = RMT_KEYS[this.order[j]], pr = this.press === j && this.pt > 0;
+      rr(b.x - b.w / 2, b.y - b.h / 2 + (pr ? 2 * s : 0), b.w, b.h, 9 * s); ctx.fillStyle = this.on.has(key) ? '#9aa0b8' : PAPER; ctx.fill(); ctx.lineWidth = 2.5; ctx.strokeStyle = INK; ctx.stroke();
+      ctx.fillStyle = INK; ctx.font = `${Math.round(12 * s)}px ${DISPLAY}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(label, b.x, b.y + (pr ? 2 * s : 0), b.w * 0.9);
+    }
+    ctx.textAlign = 'left';
+    ctx.restore();
+    if (this.sayT > 0) bigText(this.say, W / 2, H * 0.5, Math.round(26 * s), HOT, PAPER, W * 0.9);
+  },
+  drawHint(t) { const b = this.btn(Math.floor(t * 1.6) % 6); tapHint(b.x, b.y, t, 1.6); }
+};
+
+/* ---------- 大盛り49: スマホ連写 ---------- */
+const CAM_STEP = 22;   // 押したまま、この長さ px（SC()）動かすごとに1枚撮る（たたいても1枚）
+const CAM_GAP = 0.06;  // 連写の間かく（秒）。これより速くは撮れない
+const CAM_FULL = 30;   // 1台のスマホに入る枚数。いっぱいになると、次のスマホ
+const CAM_SEC = 5;     // 1枚ずつ確かめて消す
+const CAM_BUY = 30, CAM_YEN = 1000; // 1回でこの数以上撮ったら、クラウドの容量を買い足す
+const CAM_PHONE = ['パパのスマホ', 'ママのスマホ', 'おじいちゃんのスマホ'];
+const camera = {
+  key: 'camera', name: 'スマホ連写', prompt: '撮りまくれ！', hint: '押したまま 動かして 連写する', bg: '#d9e4ec',
+  bgm: song(156, [
+    ['square', 0.04, '76 . 76 . 76 . 72 . 79 . . . 76 . . . 77 . 77 . 77 . 74 . 81 . . . 79 . . .'],
+    ['triangle', 0.13, '48 . . . 55 . . . 48 . . . 55 . . . 50 . . . 57 . . . 43 . . . 50 . . .']
+  ], ['k.hhs.hhk.hhs.hs']),
+  shop: [['スマホのケース', 'スマホケース 手帳型'], ['スマホのストラップ', 'スマホ ストラップ 落下防止']],
+  bill(t) { const n = t.camera || 0, b = t.cameraBuy || 0; return { v: n + '枚', n: (b ? 'クラウドの容量を買い足す・' : '') + '1枚ずつ確かめて 消す', sec: n * CAM_SEC, yen: b * CAM_YEN }; },
+  init() { this.n = 0; this.k = 0; this.newPhone(); this.ptr = null; this.slide = 0; this.wait = 0; this.gap = 0; this.flash = 0; this.say = ''; this.sayT = 0; },
+  started() { return this.n > 0; },
+  result() { return this.n + '枚'; },
+  commit(tot) { add(tot, 'camera', this.n); add(tot, 'cameraBuy', this.n >= CAM_BUY ? 1 : 0); mx(tot, 'cameraMax', this.n); },
+  newPhone() { this.phone = CAM_PHONE[this.k++ % CAM_PHONE.length]; this.shots = []; this.cx = 1.2; this.cy = 0.9; }, // cx, cy：カメラが向いている所（部屋の絵の、画面の幅を1とした位置）
+  geo() {
+    const s = SC(), pw = Math.min(W * 0.8, 300 * s), ph = Math.min(pw * 1.9, H * 0.78), x = (W - pw) / 2, y = H * 0.13;
+    return { s, x, y, pw, ph, vx: x + 10 * s, vy: y + 40 * s, vw: pw - 20 * s, vh: ph - 130 * s }; // vx〜vh：ファインダー
+  },
+  down(id, x, y) { if (this.ptr == null) { this.ptr = { id, x, y, acc: 0 }; this.shoot(); } },
+  move(id, x, y) {
+    const p = this.ptr; if (!p || p.id !== id) return; const g = this.geo(), dx = x - p.x, dy = y - p.y; p.x = x; p.y = y;
+    const hh = Math.min(0.9, g.vh / g.vw / 2); this.cx = clamp(this.cx + dx / g.vw, 0.5, 1.9); this.cy = clamp(this.cy + dy / g.vw, hh, 1.8 - hh); // スマホを動かした向きに、ファインダーの景色が動く
+    p.acc += Math.hypot(dx, dy); if (p.acc >= CAM_STEP * g.s && this.gap <= 0) { p.acc = 0; this.shoot(); }
+  },
+  up(id) { if (this.ptr && (id == null || this.ptr.id === id)) this.ptr = null; },
+  shoot() { // カシャッ
+    if (this.slide > 0 || this.wait > 0) return;
+    this.gap = CAM_GAP; this.flash = 0.08; sfx.shutter();
+    this.shots.push({ cx: this.cx + rnd(-0.05, 0.05), cy: this.cy + rnd(-0.05, 0.05), r: rnd(-0.35, 0.35) }); // 子どもが撮るので、ななめ
+    if (scoring()) { this.n++; if (this.n === CAM_BUY) { this.say = '容量が 足りない…！'; this.sayT = 1; } else if (this.sayT <= 0) { this.say = 'カシャシャシャ'; this.sayT = 0.3; } }
+    if (this.shots.length >= CAM_FULL) { this.wait = 0.7; sfx.pii(); }
+  },
+  update(dt) {
+    this.sayT = Math.max(0, this.sayT - dt); this.gap -= dt; this.flash = Math.max(0, this.flash - dt);
+    if (this.wait > 0) { this.wait -= dt; if (this.wait <= 0) { this.slide = 1; this.newPhone(); } } // 押したままなら、次のスマホでもそのまま撮れる
+    if (this.slide > 0) this.slide = Math.max(0, this.slide - dt / 0.3);
+  },
+  room(u) { // 部屋の絵（左上が 0, 0。u：画面の幅を1とした長さ）
+    const s = SC();
+    ctx.fillStyle = '#f1e4cf'; ctx.fillRect(0, 0, 2.4 * u, 1.2 * u); ctx.fillStyle = '#c9a06b'; ctx.fillRect(0, 1.2 * u, 2.4 * u, 0.6 * u);
+    ctx.lineWidth = 3; ctx.strokeStyle = INK;
+    ctx.fillStyle = '#bfe0f0'; ctx.fillRect(0.2 * u, 0.25 * u, 0.5 * u, 0.45 * u); ctx.strokeRect(0.2 * u, 0.25 * u, 0.5 * u, 0.45 * u); ctx.beginPath(); ctx.moveTo(0.45 * u, 0.25 * u); ctx.lineTo(0.45 * u, 0.7 * u); ctx.stroke(); // 窓
+    ctx.fillStyle = POP; ctx.beginPath(); ctx.arc(1.2 * u, 0.08 * u, 0.12 * u, 0, Math.PI); ctx.fill(); ctx.stroke(); // 天井の電気
+    ctx.fillStyle = PAPER; ctx.beginPath(); ctx.arc(1.0 * u, 0.45 * u, 0.1 * u, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); ctx.beginPath(); ctx.moveTo(1.0 * u, 0.45 * u); ctx.lineTo(1.0 * u, 0.38 * u); ctx.moveTo(1.0 * u, 0.45 * u); ctx.lineTo(1.05 * u, 0.47 * u); ctx.stroke(); // 時計
+    rr(1.45 * u, 0.62 * u, 0.6 * u, 0.38 * u, 8 * s); ctx.fillStyle = INK; ctx.fill(); ctx.fillStyle = '#7cc6ef'; ctx.fillRect(1.48 * u, 0.65 * u, 0.54 * u, 0.32 * u); // テレビ
+    ctx.fillStyle = '#8a5a36'; ctx.fillRect(1.4 * u, 1.0 * u, 0.7 * u, 0.2 * u); ctx.strokeRect(1.4 * u, 1.0 * u, 0.7 * u, 0.2 * u);
+    rr(0.25 * u, 0.95 * u, 0.85 * u, 0.4 * u, 14 * s); ctx.fillStyle = '#e4574b'; ctx.fill(); ctx.stroke(); // ソファ
+    ctx.fillStyle = '#d9c38f'; ctx.beginPath(); ctx.ellipse(1.2 * u, 1.55 * u, 0.6 * u, 0.15 * u, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); // じゅうたん
+    for (const k of [0, 1]) { rr((1.9 + k * 0.14) * u, 1.42 * u, 0.1 * u, 0.2 * u, 0.05 * u); ctx.fillStyle = '#3a6fb0'; ctx.fill(); ctx.stroke(); } // スリッパ
+  },
+  view(cx, cy, x, y, w, h, rot) { // 部屋の絵の (cx, cy) を真ん中にして、x, y, w, h に描く
+    ctx.save(); ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
+    ctx.translate(x + w / 2, y + h / 2); ctx.rotate(rot || 0); ctx.translate(-cx * w, -cy * w); this.room(w);
+    ctx.restore();
+  },
+  draw() {
+    const g = this.geo(), s = g.s, off = this.slide * W;
+    ctx.fillStyle = this.bg; ctx.fillRect(0, 0, W, H);
+    ctx.save(); ctx.translate(off, 0);
+    rr(g.x - 6 * s, g.y - 6 * s, g.pw + 12 * s, g.ph + 12 * s, 30 * s); ctx.fillStyle = INK; ctx.fill(); // スマホ
+    rr(g.x, g.y, g.pw, g.ph, 24 * s); ctx.fillStyle = '#111'; ctx.fill();
+    this.view(this.cx, this.cy, g.vx, g.vy, g.vw, g.vh, 0);
+    if (this.flash > 0) { ctx.fillStyle = `rgba(255,255,255,${this.flash / 0.08 * 0.8})`; ctx.fillRect(g.vx, g.vy, g.vw, g.vh); }
+    // 上：容量のメーター
+    const fill = this.shots.length / CAM_FULL; rr(g.vx + 10 * s, g.y + 14 * s, g.vw - 20 * s, 12 * s, 6 * s); ctx.fillStyle = '#444'; ctx.fill();
+    rr(g.vx + 10 * s, g.y + 14 * s, Math.max(12 * s, (g.vw - 20 * s) * fill), 12 * s, 6 * s); ctx.fillStyle = fill > 0.8 ? HOT : '#3fae5a'; ctx.fill();
+    // 下：シャッターと、最後に撮った写真
+    const by = g.vy + g.vh + 45 * s; ctx.lineWidth = 4 * s; ctx.strokeStyle = PAPER; ctx.beginPath(); ctx.arc(g.x + g.pw / 2, by, 26 * s, 0, Math.PI * 2); ctx.stroke(); ctx.fillStyle = this.ptr ? '#ccc' : PAPER; ctx.beginPath(); ctx.arc(g.x + g.pw / 2, by, 20 * s, 0, Math.PI * 2); ctx.fill();
+    const last = this.shots[this.shots.length - 1], tw = 46 * s;
+    if (last) { this.view(last.cx, last.cy, g.x + 26 * s, by - tw / 2, tw, tw, last.r); ctx.lineWidth = 2; ctx.strokeStyle = PAPER; ctx.strokeRect(g.x + 26 * s, by - tw / 2, tw, tw); }
+    ctx.fillStyle = PAPER; ctx.font = `${Math.round(12 * s)}px ${DISPLAY}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(this.shots.length + '枚', g.x + g.pw - 50 * s, by);
+    if (this.wait > 0) { rr(g.vx + 16 * s, g.vy + g.vh * 0.4, g.vw - 32 * s, 60 * s, 12 * s); ctx.fillStyle = 'rgba(255,253,245,.95)'; ctx.fill(); ctx.fillStyle = INK; ctx.font = `${Math.round(13 * s)}px ${DISPLAY}`; ctx.fillText('ストレージが いっぱいです', W / 2, g.vy + g.vh * 0.4 + 30 * s, g.vw - 40 * s); }
+    ctx.fillStyle = INK; ctx.font = `${Math.round(14 * s)}px ${DISPLAY}`; ctx.fillText(this.phone, W / 2, g.y + g.ph + 26 * s); ctx.textAlign = 'left';
+    ctx.restore();
+    if (this.sayT > 0) bigText(this.say, W / 2, H * 0.08, Math.round(28 * s), HOT, PAPER, W * 0.9);
+  },
+  drawHint(t) { const g = this.geo(), p = (t * 1.2) % 1; finger(g.vx + g.vw * (0.25 + 0.5 * p), g.vy + g.vh * 0.5 + Math.sin(p * Math.PI * 2) * 30 * g.s, 0.9); }
+};
+
+/* ---------- 大盛り50: 電源タップ ---------- */
+const OUT_N = 6;       // 1本の電源タップのスイッチの数。全部切ると、次の部屋の電源タップ。変えるときは OUT_ROOM の家電の数と OUT_MAP もそろえる（家電の並びは3列×2段）
+const OUT_ROW = 50;    // スイッチの列から上下この距離 px（SC()）までなら、なぞっても たたいても切れる
+const OUT_SEC = 20;    // 何が止まったか、家じゅう見て回って もどす（1個）
+const OUT_BUY = 15, OUT_YEN = 1000; // 1回でこの数以上切ったら、録画が止まって、見のがした番組の有料配信
+const OUT_ROOM = [['リビング', ['Wi-Fi', 'テレビ', 'レコーダー', '加湿器', 'スタンド', '充電器']],
+  ['パパの部屋', ['パソコン', 'スピーカー', 'プリンター', 'こたつ', 'スタンド', '充電器']],
+  ['キッチン', ['電気ケトル', 'ラジオ', 'トースター', 'コーヒーメーカー', '電子レンジ', '充電器']]];
+const OUT_MAP = [3, 0, 4, 1, 5, 2]; // スイッチ（左から）と、つながっている電気製品（上の段の左から0〜2、下の段3〜5）。コードが交差しないように
+const outlet = {
+  key: 'outlet', name: '電源タップ', prompt: '切りまくれ！', hint: 'スイッチを なぞって 切る', bg: '#ece6dc',
+  bgm: song(144, [
+    ['pluck', 0.08, '72 . 74 . 76 . 79 . 76 . 74 . 72 . . . 74 . 76 . 77 . 81 . 79 . 77 . 76 . . .'],
+    ['triangle', 0.13, '48 . . . 55 . . . 45 . . . 52 . . . 41 . . . 48 . . . 43 . . . 50 . . .']
+  ], ['k.h.s.hhk.hks.h.']),
+  shop: [['電源タップ', '電源タップ 個別スイッチ'], ['コンセントカバー', 'コンセント カバー いたずら防止']],
+  bill(t) { const n = t.outlet || 0, b = t.outletBuy || 0; return { v: n + '個', n: (b ? '録画が止まって 有料配信で見直す・' : '') + '家じゅう見て回って もどす', sec: n * OUT_SEC, yen: b * OUT_YEN }; },
+  init() { this.n = 0; this.k = 0; this.newStrip(); this.ptr = {}; this.slide = 0; this.wait = 0; this.say = ''; this.sayT = 0; },
+  started() { return this.n > 0; },
+  result() { return this.n + '個'; },
+  commit(tot) { add(tot, 'outlet', this.n); add(tot, 'outletBuy', this.n >= OUT_BUY ? 1 : 0); mx(tot, 'outletMax', this.n); },
+  newStrip() { [this.room, this.dev] = OUT_ROOM[this.k++ % OUT_ROOM.length]; this.on = new Array(OUT_N).fill(true); this.tOff = new Array(OUT_N).fill(0); },
+  geo() { const s = SC(); return { s, l: W * 0.06, r: W * 0.94, sy: H * 0.74, dy: [H * 0.24, H * 0.46] }; }, // sy：スイッチの列、dy：電気製品の2段
+  sw(i) { const g = this.geo(); return { x: g.l + (g.r - g.l) * (i + 0.5) / OUT_N, y: g.sy }; },
+  dv(i) { const g = this.geo(), c = i % 3, r = Math.floor(i / 3); return { x: W * (0.2 + c * 0.3), y: g.dy[r] }; },
+  touch(x, y) {
+    if (this.slide > 0 || this.wait > 0) return;
+    const g = this.geo(); if (Math.abs(y - g.sy) > OUT_ROW * g.s) return;
+    const i = OUT_MAP[clamp(Math.floor((x - g.l) / (g.r - g.l) * OUT_N), 0, OUT_N - 1)]; if (!this.on[i]) return;
+    this.on[i] = false; this.tOff[i] = 0.5; sfx.pachi();
+    if (scoring()) { this.n++; if (this.n === OUT_BUY) { this.say = '録画が 止まった…！'; this.sayT = 1; } else if (this.sayT <= 0) { this.say = 'プツン'; this.sayT = 0.2; } }
+    if (this.on.every(v => !v)) this.wait = 0.4;
+  },
+  down(id, x, y) { this.ptr[id] = true; this.touch(x, y); },
+  move(id, x, y) { if (this.ptr[id]) this.touch(x, y); }, // なぞると、通ったスイッチが まとめて切れる
+  up(id) { if (id == null) this.ptr = {}; else delete this.ptr[id]; },
+  update(dt) {
+    this.sayT = Math.max(0, this.sayT - dt);
+    for (let i = 0; i < OUT_N; i++) this.tOff[i] = Math.max(0, this.tOff[i] - dt);
+    if (this.wait > 0) { this.wait -= dt; if (this.wait <= 0) { this.slide = 1; this.newStrip(); } }
+    if (this.slide > 0) this.slide = Math.max(0, this.slide - dt / 0.3);
+  },
+  app(name, on, s) { // 電気製品のイラスト（0, 0 が真ん中。ついている間は、光ったり動いたりする）
+    const t = clock, off = '#555';
+    const box = (x, y, w, h, r, c) => { rr(x * s, y * s, w * s, h * s, r * s); ctx.fillStyle = c; ctx.fill(); ctx.stroke(); };
+    const dot = (x, y, r, c) => { ctx.beginPath(); ctx.arc(x * s, y * s, r * s, 0, Math.PI * 2); ctx.fillStyle = c; ctx.fill(); ctx.stroke(); };
+    const line = (...p) => { ctx.beginPath(); for (let k = 0; k < p.length; k += 2) ctx[k ? 'lineTo' : 'moveTo'](p[k] * s, p[k + 1] * s); ctx.stroke(); };
+    const note = (x, y) => { if (on) { ctx.fillStyle = INK; ctx.font = `${Math.round(16 * s)}px ${DISPLAY}`; ctx.fillText('♪', x * s, (y - (t * 20) % 12) * s); } };
+    const steam = (x, y) => { if (!on) return; ctx.save(); ctx.strokeStyle = 'rgba(120,120,140,.6)'; ctx.lineWidth = 3 * s; for (const k of [-1, 1]) { ctx.beginPath(); ctx.moveTo((x + k * 6) * s, y * s); ctx.quadraticCurveTo((x + k * 6 + 6 * Math.sin(t * 6 + k)) * s, (y - 10) * s, (x + k * 6) * s, (y - 20) * s); ctx.stroke(); } ctx.restore(); };
+    ctx.lineWidth = 3; ctx.strokeStyle = INK; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    switch (name) {
+      case 'Wi-Fi': // ルーター（電波のマーク）
+        line(-24, -6, -28, -30); line(24, -6, 28, -30); box(-36, -8, 72, 30, 6, PAPER);
+        for (let k = 0; k < 4; k++) dot(-15 + k * 10, 7, 3, on && Math.sin(t * 10 + k * 1.7) > 0 ? '#3fae5a' : off);
+        if (on) { ctx.strokeStyle = '#3a6fb0'; for (const r of [10, 18, 26]) { ctx.beginPath(); ctx.arc(0, -12 * s, r * s, -Math.PI * 0.75, -Math.PI * 0.25); ctx.stroke(); } ctx.strokeStyle = INK; }
+        break;
+      case 'テレビ':
+        box(-44, -36, 88, 58, 6, INK); ctx.fillStyle = on ? '#7cc6ef' : '#222'; ctx.fillRect(-38 * s, -30 * s, 76 * s, 46 * s);
+        if (on) { ctx.fillStyle = '#7dc77a'; ctx.fillRect(-38 * s, 2 * s, 76 * s, 14 * s); ctx.fillStyle = '#ff9f43'; ctx.beginPath(); ctx.arc(-14 * s, -14 * s, 8 * s, 0, Math.PI * 2); ctx.fill(); }
+        box(-16, 22, 32, 8, 3, '#666');
+        break;
+      case 'レコーダー':
+        box(-46, -8, 92, 28, 4, '#2b2b33'); ctx.fillStyle = on ? '#bfffd0' : '#111'; ctx.fillRect(-38 * s, -2 * s, 46 * s, 16 * s);
+        if (on) { ctx.fillStyle = HOT; ctx.font = `${Math.round(10 * s)}px ${DISPLAY}`; ctx.fillText('●録画中', -15 * s, 6 * s, 42 * s); }
+        dot(30, 6, 4, on ? '#3fae5a' : off);
+        break;
+      case '加湿器': // 湯気が出る
+        box(-24, -24, 48, 56, 14, PAPER); box(-18, -12, 36, 22, 8, on ? '#bfe6ff' : '#999'); dot(0, 21, 3, on ? '#3fae5a' : off);
+        if (on) { ctx.fillStyle = 'rgba(200,215,230,.9)'; for (let k = 0; k < 3; k++) { const p = (t * 0.8 + k / 3) % 1; ctx.beginPath(); ctx.arc(Math.sin(k * 2 + t) * 6 * s, (-30 - p * 18) * s, (4 + p * 5) * s, 0, Math.PI * 2); ctx.fill(); } }
+        break;
+      case 'スタンド': // 机の電気（光が当たる）
+        if (on) { ctx.fillStyle = 'rgba(255,220,90,.5)'; ctx.beginPath(); ctx.moveTo(8 * s, -16 * s); ctx.lineTo(-10 * s, 34 * s); ctx.lineTo(46 * s, 34 * s); ctx.closePath(); ctx.fill(); }
+        box(-34, 26, 40, 8, 3, '#555'); line(-14, 26, -24, -4, -2, -26);
+        ctx.beginPath(); ctx.moveTo(-8 * s, -34 * s); ctx.lineTo(22 * s, -26 * s); ctx.lineTo(12 * s, -10 * s); ctx.closePath(); ctx.fillStyle = on ? POP : '#888'; ctx.fill(); ctx.stroke();
+        break;
+      case '充電器': // 充電中のスマホ
+        box(-16, -34, 32, 64, 6, INK); ctx.fillStyle = on ? '#9fe3b0' : '#222'; ctx.fillRect(-12 * s, -28 * s, 24 * s, 50 * s);
+        if (on) { ctx.fillStyle = INK; ctx.beginPath(); ctx.moveTo(3 * s, -16 * s); ctx.lineTo(-6 * s, 0); ctx.lineTo(0, 0); ctx.lineTo(-3 * s, 12 * s); ctx.lineTo(6 * s, -4 * s); ctx.lineTo(0, -4 * s); ctx.closePath(); ctx.fill(); }
+        break;
+      case 'パソコン':
+        box(-42, -36, 84, 54, 6, INK); ctx.fillStyle = on ? '#3a6fb0' : '#222'; ctx.fillRect(-36 * s, -30 * s, 72 * s, 42 * s);
+        if (on) { ctx.fillStyle = PAPER; ctx.fillRect(-28 * s, -24 * s, 36 * s, 24 * s); ctx.fillStyle = POP; ctx.fillRect(-28 * s, -24 * s, 36 * s, 5 * s); }
+        box(-8, 18, 16, 10, 2, '#666'); box(-22, 28, 44, 6, 3, '#666');
+        break;
+      case 'スピーカー': // 音符が出る
+        for (const k of [-1, 1]) { box(k * 26 - 14, -30, 28, 58, 5, '#3b3f55'); dot(k * 26, -15, 6, '#777'); dot(k * 26, 10, 9 + (on ? Math.sin(t * 20) * 1.5 : 0), '#777'); }
+        note(0, -20);
+        break;
+      case 'プリンター': // 紙が出てくる
+        if (on) box(-22, -36 + (t * 30) % 14, 44, 24, 2, PAPER);
+        box(-40, -18, 80, 40, 6, '#e4e4ea'); box(-28, 4, 56, 8, 2, '#bbb'); dot(30, -8, 3, on ? '#3fae5a' : off);
+        break;
+      case 'こたつ': // 中が赤く光る
+        if (on) { ctx.fillStyle = 'rgba(255,90,40,.55)'; ctx.fillRect(-40 * s, 18 * s, 80 * s, 14 * s); }
+        box(-46, -6, 92, 30, 6, '#e4574b'); box(-52, -14, 104, 10, 3, '#c99a63');
+        line(-38, 24, -38, 32); line(38, 24, 38, 32);
+        break;
+      case '電気ケトル': // 湯気が出る
+        box(-24, 26, 48, 8, 3, '#555'); box(-20, -24, 40, 50, 10, PAPER);
+        ctx.beginPath(); ctx.moveTo(20 * s, -14 * s); ctx.quadraticCurveTo(34 * s, -6 * s, 20 * s, 12 * s); ctx.stroke(); line(-20, -18, -32, -26);
+        dot(-6, 14, 3, on ? HOT : off); steam(0, -28);
+        break;
+      case 'ラジオ': // 音符が出る
+        line(20, -14, 34, -38); box(-38, -14, 76, 42, 8, '#c99a63');
+        ctx.fillStyle = 'rgba(35,27,46,.4)'; for (let k = 0; k < 4; k++) ctx.fillRect(-30 * s, (-6 + k * 7) * s, 30 * s, 3 * s);
+        dot(20, 8, 9, PAPER); note(-24, -26);
+        break;
+      case 'トースター': // 窓が赤く光る
+        box(-36, -16, 72, 44, 10, '#d9dde3'); box(-26, -4, 40, 22, 4, on ? (Math.sin(t * 8) > 0 ? '#ff7a2e' : '#ff9f43') : '#444');
+        box(24, -2, 6, 16, 2, '#555'); for (const k of [-1, 1]) box(k * 14 - 9, -22, 18, 6, 2, '#555');
+        break;
+      case 'コーヒーメーカー': // コーヒーがぽたぽた落ちる
+        box(-30, -36, 60, 14, 4, '#3b3f55'); box(-30, -36, 14, 70, 4, '#3b3f55'); box(-30, 26, 60, 8, 3, '#3b3f55');
+        box(-8, -2, 30, 28, 5, 'rgba(255,255,255,.6)'); ctx.fillStyle = '#6b3e1f'; ctx.fillRect(-5 * s, 12 * s, 24 * s, 12 * s);
+        if (on) { const p = (t * 3) % 1; ctx.beginPath(); ctx.arc(7 * s, (-20 + p * 30) * s, 2.5 * s, 0, Math.PI * 2); ctx.fill(); }
+        break;
+      case '電子レンジ': // 中が光って、お皿が回る
+        box(-46, -30, 92, 58, 6, '#e4e4ea'); box(-38, -22, 58, 42, 4, on ? '#ffe9a0' : '#444');
+        if (on) { ctx.save(); ctx.translate(-9 * s, 10 * s); ctx.scale(1, 0.3); ctx.rotate(t * 3); ctx.strokeStyle = 'rgba(35,27,46,.5)'; ctx.beginPath(); ctx.arc(0, 0, 18 * s, 0, Math.PI * 1.6); ctx.stroke(); ctx.restore(); }
+        dot(33, -10, 5, '#bbb'); dot(33, 8, 5, '#bbb');
+        break;
+    }
+  },
+  draw() {
+    const g = this.geo(), s = g.s, off = this.slide * W;
+    ctx.fillStyle = this.bg; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#c9a06b'; ctx.fillRect(0, H * 0.62, W, H * 0.38); ctx.fillStyle = INK; ctx.fillRect(0, H * 0.62 - 2, W, 3); // 床
+    ctx.save(); ctx.translate(off, 0);
+    ctx.fillStyle = INK; ctx.font = `${Math.round(15 * s)}px ${DISPLAY}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(this.room + 'の 電源タップ', W / 2, H * 0.13);
+    // コード（電気製品から、スイッチへ）
+    ctx.lineWidth = 3 * s; ctx.strokeStyle = '#555'; for (let i = 0; i < OUT_N; i++) { const d = OUT_MAP[i], a = this.dv(d), b = this.sw(i); ctx.beginPath(); ctx.moveTo(a.x, a.y + 56 * s);
+      if (d < 3) { const gx = a.x + W * 0.15, y1 = g.dy[1] + 56 * s; ctx.quadraticCurveTo(a.x, a.y + 80 * s, gx, a.y + 90 * s); ctx.lineTo(gx, y1); ctx.bezierCurveTo(gx, y1 + 40 * s, b.x, b.y - 70 * s, b.x, b.y - 26 * s); } // 上の段は、下の段の家電のあいだを通す
+      else ctx.bezierCurveTo(a.x, a.y + 100 * s, b.x, b.y - 90 * s, b.x, b.y - 26 * s);
+      ctx.stroke(); }
+    // 電気製品（ついている間は光る。切ると暗くなる）
+    for (let i = 0; i < OUT_N; i++) {
+      const p = this.dv(i), on = this.on[i], sh = this.tOff[i] > 0 ? rnd(-1, 1) * 3 * s : 0;
+      ctx.save(); ctx.translate(p.x + sh, p.y); this.app(this.dev[i], on, s); ctx.restore();
+      ctx.fillStyle = on ? INK : '#8a8a8a'; ctx.font = `${Math.round(11 * s)}px ${DISPLAY}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(this.dev[i], p.x, p.y + 46 * s, W * 0.3);
+      if (this.tOff[i] > 0) bigText('プツン', p.x, p.y - 44 * s, Math.round(16 * s), HOT, PAPER);
+    }
+    // 電源タップ
+    rr(g.l - 10 * s, g.sy - 28 * s, g.r - g.l + 20 * s, 56 * s, 12 * s); ctx.fillStyle = PAPER; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = INK; ctx.stroke();
+    for (let i = 0; i < OUT_N; i++) {
+      const p = this.sw(i), on = this.on[OUT_MAP[i]];
+      rr(p.x - 14 * s, p.y - 20 * s, 28 * s, 40 * s, 5 * s); ctx.fillStyle = '#ddd'; ctx.fill(); ctx.stroke();
+      rr(p.x - 10 * s, p.y + (on ? -16 : 0) * s, 20 * s, 16 * s, 3 * s); ctx.fillStyle = on ? '#ff9f43' : '#999'; ctx.fill(); ctx.stroke(); // スイッチ（ついているとオレンジに光る）
+    }
+    ctx.textAlign = 'left';
+    ctx.restore();
+    if (this.sayT > 0) bigText(this.say, W / 2, H * 0.88, Math.round(28 * s), HOT, PAPER, W * 0.9);
+  },
+  drawHint(t) { const g = this.geo(), p = (t * 1.2) % 1; finger(g.l + (g.r - g.l) * p, g.sy, 0.9); }
+};
+
+STAGE_LIST.push(squirt, fan, remote, camera, outlet);
+ZUKAN_EXTRA.push(
+  { id: 'squirt', name: 'びしょぬれリビング', desc: '水鉄砲で1回で8か所 ぬらす', ok: t => (t.squirtMax || 0) >= 8 },
+  { id: 'fan', name: '紙吹雪', desc: '扇風機で1回で35枚 飛ばす', ok: t => (t.fanMax || 0) >= 35 },
+  { id: 'remote', name: '設定迷子', desc: 'リモコンで1回で12個 設定を変える', ok: t => (t.remoteMax || 0) >= 12 },
+  { id: 'camera', name: '容量オーバー', desc: 'スマホで1回で58枚 撮る', ok: t => (t.cameraMax || 0) >= 58 },
+  { id: 'outlet', name: '節電王', desc: '電源タップで1回で29個 切る', ok: t => (t.outletMax || 0) >= 29 }
+);
